@@ -1,0 +1,74 @@
+# Weekly upstream sync. Merges vituha230/Neuro-Skyrim-Integration `main` into a
+# branch off `gamefoundry` and opens (or refreshes) a PR. A clean merge goes to
+# branch `upstream-sync` and gets a CI build; a conflicting one pushes upstream
+# `main` as `upstream-main` so the conflicts show in the PR. `gamefoundry` is
+# never written by this workflow.
+name: upstream-sync
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"   # Mondays 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: upstream-sync
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      UPSTREAM: https://github.com/vituha230/Neuro-Skyrim-Integration.git
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: gamefoundry
+          fetch-depth: 0
+      - name: Merge upstream main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream "$UPSTREAM"
+          git fetch --no-tags upstream main
+          up=$(git rev-parse upstream/main)
+          behind=$(git rev-list --count HEAD..upstream/main)
+          echo "upstream main ${up}; gamefoundry is ${behind} commit(s) behind"
+          if [ "$behind" = 0 ]; then
+            echo "In sync; nothing to do."
+            exit 0
+          fi
+          log=$(git log --oneline --no-decorate HEAD..upstream/main | head -50)
+          body=$(printf 'Upstream `main` is at %s, %s commit(s) ahead of `gamefoundry`.\n\n```\n%s\n```\n\nAfter merging: the push to `gamefoundry` publishes release `gf-<sha7>`; bump the submodule and `games/skyrim/deps.toml` in GameFoundry (see docs/AGENTS.md: a live smoke test on the VM before merging the pin).' "$up" "$behind" "$log")
+          git checkout -b upstream-sync
+          if git merge --no-ff --no-edit -m "Merge upstream main ${up::7} into gamefoundry" upstream/main; then
+            head=upstream-sync
+            git push --force origin upstream-sync
+          else
+            git merge --abort
+            head=upstream-main
+            body=$(printf '%s\n\n**Conflicts:** the automatic merge failed. Resolve in this PR (merge `gamefoundry` into `upstream-main` locally, fix, push).' "$body")
+            git push --force origin "upstream/main:refs/heads/upstream-main"
+          fi
+          # Close a PR left from the other head (e.g. last week conflicted, this week clean).
+          for other in upstream-sync upstream-main; do
+            [ "$other" = "$head" ] && continue
+            n=$(gh pr list --head "$other" --base gamefoundry --state open --json number --jq '.[0].number // empty')
+            [ -n "$n" ] && gh pr close "$n" --comment "Superseded by a newer upstream sync from \`$head\`."
+          done
+          title="Merge upstream main (${behind} commits, ${up::7})"
+          n=$(gh pr list --head "$head" --base gamefoundry --state open --json number --jq '.[0].number // empty')
+          if [ -n "$n" ]; then
+            gh pr edit "$n" --title "$title" --body "$body"
+          else
+            gh pr create --head "$head" --base gamefoundry --title "$title" --body "$body"
+          fi
+          # PRs and pushes made with GITHUB_TOKEN do not trigger workflows; dispatch the build.
+          if [ "$head" = upstream-sync ]; then
+            gh workflow run build.yml --ref upstream-sync
+          fi

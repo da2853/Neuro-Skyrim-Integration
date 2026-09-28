@@ -1,0 +1,104 @@
+# GameFoundry fork CI: build the SKSE plugin with xmake + MSVC and publish it.
+# Every push to `gamefoundry` publishes release gf-<sha7>; PRs and manual runs
+# only upload the build as a workflow artifact. See GAMEFOUNDRY.md.
+name: build
+
+on:
+  push:
+    branches: [gamefoundry]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core-tests:
+    name: core tests (host compiler)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run gamefoundry/tests/test_core.cpp
+        run: |
+          g++ --version | head -1
+          g++ -std=c++20 -Wall -Wextra -Werror -I src gamefoundry/tests/test_core.cpp -o test_core
+          ./test_core
+
+  build:
+    name: plugin (windows, xmake, MSVC)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: "3.1.1"   # commonlibsse needs >= 3.0.0
+          package-cache: true
+          package-cache-key: ${{ hashFiles('xmake-requires.lock', 'lib/xmake.lua', 'lib/commonlibsse/xmake.lua', 'lib/commonlibsse/lib/commonlib-shared/xmake.lua') }}
+      - name: Configure
+        run: xmake f -y -p windows -a x64 -m releasedbg
+      - name: Build
+        run: xmake build -y -v Neuro-Skyrim-Integration
+      - name: Package
+        shell: pwsh
+        run: |
+          $dll = Get-ChildItem -Recurse -Path build -Filter Neuro-Skyrim-Integration.dll | Select-Object -First 1
+          $pdb = Get-ChildItem -Recurse -Path build -Filter Neuro-Skyrim-Integration.pdb | Select-Object -First 1
+          if (-not $dll) { throw "DLL not found under build/" }
+          $sha7 = "${{ github.sha }}".Substring(0, 7)
+          New-Item -ItemType Directory -Force -Path dist/stage/Data/SKSE/Plugins, dist/stage/Data/Scripts | Out-Null
+          Copy-Item $dll.FullName dist/stage/Data/SKSE/Plugins/
+          Copy-Item mysc.esp dist/stage/Data/
+          Copy-Item -Recurse scripts_compiled/Scripts/* dist/stage/Data/Scripts/
+          Compress-Archive -Path dist/stage/Data -DestinationPath "dist/NeuroSkyrim-gamefoundry-$sha7.zip"
+          Copy-Item $dll.FullName, mysc.esp dist/
+          if ($pdb) { Copy-Item $pdb.FullName dist/ }
+          Remove-Item -Recurse dist/stage
+          Push-Location dist
+          Get-ChildItem -File | Sort-Object Name | ForEach-Object {
+            "{0}  {1}" -f (Get-FileHash -Algorithm SHA256 $_.Name).Hash.ToLower(), $_.Name
+          } | Set-Content -Encoding ascii SHA256SUMS
+          Get-Content SHA256SUMS
+          Pop-Location
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+
+  release:
+    name: publish release gf-<sha7>
+    needs: [core-tests, build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/gamefoundry'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: plugin-${{ github.sha }}
+          path: dist
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="gf-${GITHUB_SHA::7}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "release $tag already exists"; exit 0
+          fi
+          {
+            echo "GameFoundry build of \`gamefoundry\` at ${GITHUB_SHA}."
+            echo
+            echo "Install: unzip the \`NeuroSkyrim-gamefoundry-*.zip\` into the Skyrim SE 1.6.1170 directory (it holds \`Data/\`), with SKSE 2.2.6 and Address Library. Settings: GAMEFOUNDRY.md."
+            echo
+            echo '```'
+            cat dist/SHA256SUMS
+            echo '```'
+          } > notes.md
+          gh release create "$tag" dist/* --target "$GITHUB_SHA" --title "$tag" --notes-file notes.md
