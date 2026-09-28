@@ -152,6 +152,7 @@
 
 #include "InputActions.hpp"
 #include "main.hpp"
+#include "gamefoundry/GameFoundry.hpp"
 #include <neurosdk.h>
 #include "DialogueProcessor.hpp"
 #include "BarterProcessor.hpp"
@@ -2686,6 +2687,7 @@ private:
 
         
         tick_socket(dtime);
+        gamefoundry::OnFrame(); // GameFoundry patch 2: flush input echo
 
         
 
@@ -4127,6 +4129,7 @@ void MessageListener(SKSE::MessagingInterface::Message* message) {
         MiscThings::EventSink::GetSingleton()->Init();
         Observer::EventSink::GetSingleton()->Init();
         Observer::attatch_hitmap();
+        gamefoundry::OnDataLoaded(); // GameFoundry patch 2: input echo sink
 
         //auto task_interface = SKSE::GetTaskInterface();
         //task_interface.
