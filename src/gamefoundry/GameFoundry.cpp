@@ -317,10 +317,13 @@ namespace gamefoundry
                 s.seq = m_seq++;
                 s.t_ns = now;
                 s.cost_us = m_lastCostUs;
+                s.send_us = m_lastSendUs;
                 Fill(s);
                 const auto msg = core::encode_telemetry(s);
+                const auto encoded = NowNs();
                 const bool ok = m_neuroSocket->SendContext(msg.c_str(), true);
-                m_lastCostUs = (NowNs() - now) / 1000;
+                m_lastCostUs = (encoded - now) / 1000;
+                m_lastSendUs = (NowNs() - encoded) / 1000;
                 Account(now, msg.size(), ok);
             }
 
@@ -335,6 +338,8 @@ namespace gamefoundry
                 m_failed += ok ? 0 : 1;
                 m_sumUs += m_lastCostUs;
                 m_maxUs = std::max(m_maxUs, m_lastCostUs);
+                m_sumSendUs += m_lastSendUs;
+                m_maxSendUs = std::max(m_maxSendUs, m_lastSendUs);
                 m_sumBytes += bytes;
                 m_maxBytes = std::max(m_maxBytes, bytes);
                 if (m_windowStart == 0)
@@ -342,19 +347,21 @@ namespace gamefoundry
                 const auto elapsed = now - m_windowStart;
                 if (elapsed < 60'000'000'000)
                     return;
-                REX::INFO("GameFoundry: telemetry {} msgs in {:.1f} s ({} failed), cost avg {} us max {} us, size avg {} max {} bytes",
-                    m_count, elapsed / 1e9, m_failed, m_sumUs / m_count, m_maxUs, m_sumBytes / static_cast<std::size_t>(m_count), m_maxBytes);
+                REX::INFO("GameFoundry: telemetry {} msgs in {:.1f} s ({} failed), read+encode avg {} us max {} us, send avg {} us max {} us, size avg {} max {} bytes",
+                    m_count, elapsed / 1e9, m_failed, m_sumUs / m_count, m_maxUs, m_sumSendUs / m_count, m_maxSendUs,
+                    m_sumBytes / static_cast<std::size_t>(m_count), m_maxBytes);
                 m_windowStart = now;
                 m_count = m_failed = 0;
-                m_sumUs = m_maxUs = 0;
+                m_sumUs = m_maxUs = m_sumSendUs = m_maxSendUs = 0;
                 m_sumBytes = m_maxBytes = 0;
             }
 
             core::Ticker  m_ticker;
             std::uint64_t m_seq{};
             std::int64_t  m_lastCostUs{};
+            std::int64_t  m_lastSendUs{};
             std::int64_t  m_windowStart{};
-            std::int64_t  m_count{}, m_failed{}, m_sumUs{}, m_maxUs{};
+            std::int64_t  m_count{}, m_failed{}, m_sumUs{}, m_maxUs{}, m_sumSendUs{}, m_maxSendUs{};
             std::size_t   m_sumBytes{}, m_maxBytes{};
         };
     }

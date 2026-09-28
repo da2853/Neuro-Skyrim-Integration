@@ -343,7 +343,7 @@ namespace gamefoundry::core
     {
         std::int64_t id{};       // the plugin's object-list id ([id N] in its context text)
         std::string  name;
-        std::string  kind;       // actor, door, container, item, activator, furniture, flora, other
+        std::string  kind;       // actor, corpse, door, container, item, activator, furniture, flora, other
         double       dist{};     // world units from the player
         double       bearing{};  // degrees, relative to the player's heading
         bool         hostile{};
@@ -353,7 +353,8 @@ namespace gamefoundry::core
     {
         std::uint64_t             seq{};
         std::int64_t              t_ns{};
-        std::int64_t              cost_us{};  // previous sample's cost
+        std::int64_t              cost_us{};  // previous sample: read + encode, microseconds
+        std::int64_t              send_us{};  // previous sample: SendContext, microseconds
         std::optional<Vec3>       pos;
         std::optional<double>     heading;
         std::optional<Vec3>       cam;
@@ -420,6 +421,8 @@ namespace gamefoundry::core
         append_int(out, s.t_ns);
         out += ",\"us\":";
         append_int(out, s.cost_us);
+        out += ",\"send_us\":";
+        append_int(out, s.send_us);
         if (s.pos) {
             out += ",\"pos\":";
             append_vec(out, *s.pos, 10);

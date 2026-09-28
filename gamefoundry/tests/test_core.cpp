@@ -195,6 +195,7 @@ static TelemetrySample telemetry_sample()
     s.seq = 42;
     s.t_ns = 123'456'789;
     s.cost_us = 57;
+    s.send_us = 210;
     s.pos = Vec3{ 12345.678, -2345.04, 7890.0 };
     s.heading = 359.999;
     s.cam = Vec3{ 12345.6, -2345.0, 8010.25 };
@@ -216,7 +217,7 @@ static void test_encode_telemetry()
 {
     const auto s = encode_telemetry(telemetry_sample());
     const std::string expected =
-        "[gf:telemetry/v1]{\"seq\":42,\"t_ns\":123456789,\"us\":57,"
+        "[gf:telemetry/v1]{\"seq\":42,\"t_ns\":123456789,\"us\":57,\"send_us\":210,"
         "\"pos\":[12345.7,-2345,7890],\"heading\":0,"
         "\"cam\":[12345.6,-2345,8010.3],\"rot\":[12.35,0,90],\"fov\":80,"
         "\"cell\":{\"id\":\"0001A26F\",\"name\":\"Whiterun \\\"Plains\\\"\",\"interior\":false},"
@@ -233,7 +234,7 @@ static void test_encode_telemetry()
     menu.menu_stack = { "Main Menu" };
     menu.paused = true;
     CHECK(encode_telemetry(menu) ==
-          "[gf:telemetry/v1]{\"seq\":0,\"t_ns\":0,\"us\":0,\"menu_stack\":[\"Main Menu\"],"
+          "[gf:telemetry/v1]{\"seq\":0,\"t_ns\":0,\"us\":0,\"send_us\":0,\"menu_stack\":[\"Main Menu\"],"
           "\"paused\":true,\"loading\":false,\"in_combat\":false,\"in_dialogue\":false,\"dead\":false,\"nearby\":[]}");
 
     // Size cap: the furthest nearby entries go first; names are cut to 40 bytes.

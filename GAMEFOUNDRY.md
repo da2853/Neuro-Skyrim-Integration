@@ -35,7 +35,7 @@ directory), which wins over the default. Invalid values fall through.
 The resolved values are logged once to the SKSE plugin log
 (`GameFoundry: wsUrl=... inputEcho=... inputEchoMs=... telemetry=... telemetryMs=...`).
 Once a minute the telemetry push logs its rate, cost and size
-(`GameFoundry: telemetry N msgs in 60.0 s (0 failed), cost avg U us max U us, size avg B max B bytes`).
+(`GameFoundry: telemetry N msgs in 60.0 s (0 failed), read+encode avg U us max U us, send avg U us max U us, size avg B max B bytes`).
 
 ## Patch 1: telemetry push wire format
 
@@ -44,7 +44,7 @@ update hook reads the game state on the main thread and sends one **silent**
 `context` message (at most 1000 bytes):
 
 ```
-[gf:telemetry/v1]{"seq":N,"t_ns":T,"us":U,"pos":[x,y,z],"heading":deg,"cam":[x,y,z],
+[gf:telemetry/v1]{"seq":N,"t_ns":T,"us":U,"send_us":V,"pos":[x,y,z],"heading":deg,"cam":[x,y,z],
  "rot":[pitch,roll,yaw],"fov":deg,"cell":{"id":"0001A26F","name":"...","interior":false},
  "location":"...","menu_stack":["Dialogue Menu"],"paused":false,"loading":false,
  "in_combat":false,"in_dialogue":true,"dead":false,
@@ -54,7 +54,8 @@ update hook reads the game state on the main thread and sends one **silent**
 
 - `seq` increments per sample (a gap means a failed send); `t_ns` is the
   plugin's `steady_clock` at the sample; `us` is how long the previous sample
-  took to read, encode and queue, in microseconds.
+  took to read the game and encode, `send_us` how long its `SendContext`
+  (libneurosdk queue + mongoose wakeup) took, both in microseconds.
 - World units; angles in degrees. `pos` and `heading` are the player's
   (`data.location`, `data.angle.z`); `cam` and `rot` are the camera root's
   world transform. `rot` is `[pitch, roll, yaw]` in the convention of
