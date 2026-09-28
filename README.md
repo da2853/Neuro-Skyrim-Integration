@@ -132,3 +132,4 @@ To view all available tasks, just run `xmake tasks`. To view details for a speci
 
 
 
+sync test
