@@ -16,7 +16,7 @@ upstream merges stay clean:
 | File | Change |
 | --- | --- |
 | `src/Socket.cpp` | patch 0: `desc.url = gamefoundry::WebSocketUrl()` instead of the hard-coded `ws://localhost:8000` |
-| `src/main.cpp` | patch 2: `gamefoundry::OnDataLoaded()` on `kDataLoaded`, `gamefoundry::OnFrame()` in the update hook |
+| `src/main.cpp` | patch 2: `gamefoundry::OnDataLoaded()` on `kDataLoaded`, `gamefoundry::OnFrame()` in the update hook (patch 1 runs from the same two hooks) |
 | `xmake.lua` | skip the copy-into-game step when `SKYRIM_PATH` is unset (CI) |
 
 ## Settings
@@ -29,9 +29,53 @@ directory), which wins over the default. Invalid values fall through.
 | Bridge WebSocket URL (`ws://` or `wss://`) | `NEURO_SDK_WS_URL` | `wsUrl` | `ws://localhost:8000` |
 | Input echo on/off | `GF_INPUT_ECHO` (`0`/`1`) | `inputEcho` | `1` |
 | Echo flush interval, ms (10-1000) | `GF_INPUT_ECHO_MS` | `inputEchoMs` | `50` |
+| Telemetry push on/off | `GF_TELEMETRY` (`0`/`1`) | `telemetry` | `1` |
+| Telemetry interval, ms (50-1000) | `GF_TELEMETRY_MS` | `telemetryMs` | `100` |
 
 The resolved values are logged once to the SKSE plugin log
-(`GameFoundry: wsUrl=... inputEcho=... inputEchoMs=...`).
+(`GameFoundry: wsUrl=... inputEcho=... inputEchoMs=... telemetry=... telemetryMs=...`).
+Once a minute the telemetry push logs its rate, cost and size
+(`GameFoundry: telemetry N msgs in 60.0 s (0 failed), cost avg U us max U us, size avg B max B bytes`).
+
+## Patch 1: telemetry push wire format
+
+Every `telemetryMs` (default 100 ms, 10 Hz) while the socket is connected, the
+update hook reads the game state on the main thread and sends one **silent**
+`context` message (at most 1000 bytes):
+
+```
+[gf:telemetry/v1]{"seq":N,"t_ns":T,"us":U,"pos":[x,y,z],"heading":deg,"cam":[x,y,z],
+ "rot":[pitch,roll,yaw],"fov":deg,"cell":{"id":"0001A26F","name":"...","interior":false},
+ "location":"...","menu_stack":["Dialogue Menu"],"paused":false,"loading":false,
+ "in_combat":false,"in_dialogue":true,"dead":false,
+ "vitals":{"health":[cur,max],"stamina":[cur,max],"magicka":[cur,max]},
+ "nearby":[[id,"name","kind",dist,bearing,hostile],...]}
+```
+
+- `seq` increments per sample (a gap means a failed send); `t_ns` is the
+  plugin's `steady_clock` at the sample; `us` is how long the previous sample
+  took to read, encode and queue, in microseconds.
+- World units; angles in degrees. `pos` and `heading` are the player's
+  (`data.location`, `data.angle.z`); `cam` and `rot` are the camera root's
+  world transform. `rot` is `[pitch, roll, yaw]` in the convention of
+  `Actor::data.angle` (the inverse of `NiMatrix3::EulerAnglesToAxesZXY`):
+  pitch positive looking down, yaw 0 = +Y (north) turning clockwise, 0-360.
+  `fov` is `PlayerCamera::worldFOV`.
+- `menu_stack` is the UI menu stack bottom to top without the always-open
+  `HUD Menu`, `Cursor Menu` and `Fader Menu`. `paused` is `UI::GameIsPaused()`,
+  `loading` is the `Loading Menu`, `in_dialogue` the `Dialogue Menu`.
+- `vitals` are current and maximum actor values.
+- `nearby`: up to 8 entries of the plugin's own object list (the `[id N]` ids
+  its context messages and actions use) within 4096 units, nearest first:
+  id, display name (at most 40 bytes), kind (`actor`, `corpse`, `door`,
+  `container`, `activator`, `furniture`, `flora`, `item`, `other`), distance,
+  bearing relative to the player's heading (-180..180, positive right), and
+  whether an actor is hostile. The furthest entries are dropped first if the
+  message would exceed 1000 bytes.
+- Keys whose value the game cannot give are omitted, not guessed: at the main
+  menu or during loading only `menu_stack` and the flags are sent.
+
+The GameFoundry decoder is `games/skyrim/telemetry_push.py`.
 
 ## Patch 2: input echo wire format
 
@@ -72,7 +116,8 @@ The GameFoundry decoder is `games/skyrim/input_echo.py`.
 (`Data/SKSE/Plugins/*.dll`, `Data/mysc.esp`, `Data/Scripts/*.pex`) and
 `SHA256SUMS`.
 
-Run the core tests locally:
+Run the core tests locally (they also print one sample of each wire format,
+which the GameFoundry decoder tests use as fixtures):
 
 ```
 c++ -std=c++20 -Wall -Wextra -Werror -I src gamefoundry/tests/test_core.cpp -o test_core && ./test_core
@@ -89,3 +134,5 @@ c++ -std=c++20 -Wall -Wextra -Werror -I src gamefoundry/tests/test_core.cpp -o t
    `GameFoundry:` lines.
 4. Once in game, move the mouse and press keys: the server receives silent
    `context` messages starting with `[gf:input/v1]`.
+5. Every 100 ms the server receives a silent `context` message starting with
+   `[gf:telemetry/v1]`; the SKSE log shows the per-minute telemetry line.

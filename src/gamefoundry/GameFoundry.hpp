@@ -3,7 +3,7 @@
 // GameFoundry fork hooks. Upstream files call into these with one line each:
 //   Socket.cpp  NeuroSocket::Initialize   -> gamefoundry::WebSocketUrl()   (patch 0)
 //   main.cpp    kDataLoaded               -> gamefoundry::OnDataLoaded()   (patch 2)
-//   main.cpp    OnUpdateHook::OnUpdateMod -> gamefoundry::OnFrame()        (patch 2)
+//   main.cpp    OnUpdateHook::OnUpdateMod -> gamefoundry::OnFrame()        (patches 1 and 2)
 // See GAMEFOUNDRY.md.
 
 namespace gamefoundry
@@ -12,9 +12,11 @@ namespace gamefoundry
     // Resolved once and cached; the pointer stays valid for the process lifetime.
     const char* WebSocketUrl();
 
-    // Registers the input-echo sink on BSInputDeviceManager (unless disabled).
+    // Registers the input-echo sink on BSInputDeviceManager (unless disabled) and
+    // arms the telemetry push.
     void OnDataLoaded();
 
-    // Flushes a due input-echo batch. Called once per frame from the update hook.
+    // Flushes a due input-echo batch and sends a due telemetry sample (patch 1).
+    // Called once per frame from the update hook, which also runs while paused.
     void OnFrame();
 }
