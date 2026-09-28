@@ -56,6 +56,7 @@ target("Neuro-Skyrim-Integration")
     set_pcxxheader("src/pch.h")
 
 	on_install(function (target)
+        if not os.getenv("SKYRIM_PATH") then return end -- GameFoundry: CI builds without a game install
         local target_file = target:targetfile()
         local plugin_folder = path.join(skyrim_path, "Data/SKSE/Plugins")
 
@@ -74,6 +75,7 @@ target("Neuro-Skyrim-Integration")
 	
 	
 	after_build(function (target)
+        if not os.getenv("SKYRIM_PATH") then return end -- GameFoundry: CI builds without a game install
 	
 		local target_file = target:targetfile()
         local plugin_folder = path.join(skyrim_path, "Data/SKSE/Plugins")
