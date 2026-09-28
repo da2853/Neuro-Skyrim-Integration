@@ -21,7 +21,7 @@ jobs:
     name: core tests (host compiler)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build and run gamefoundry/tests/test_core.cpp
         run: |
           g++ --version | head -1
@@ -32,7 +32,7 @@ jobs:
     name: plugin (windows, xmake, MSVC)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
       - uses: xmake-io/github-action-setup-xmake@v1
@@ -60,12 +60,14 @@ jobs:
           if ($pdb) { Copy-Item $pdb.FullName dist/ }
           Remove-Item -Recurse dist/stage
           Push-Location dist
-          Get-ChildItem -File | Sort-Object Name | ForEach-Object {
+          # LF line endings so `sha256sum -c` / `shasum -a 256 -c` work on Linux and macOS.
+          $sums = Get-ChildItem -File | Sort-Object Name | ForEach-Object {
             "{0}  {1}" -f (Get-FileHash -Algorithm SHA256 $_.Name).Hash.ToLower(), $_.Name
-          } | Set-Content -Encoding ascii SHA256SUMS
+          }
+          [IO.File]::WriteAllText("$PWD/SHA256SUMS", ($sums -join "`n") + "`n")
           Get-Content SHA256SUMS
           Pop-Location
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: plugin-${{ github.sha }}
           path: dist/
@@ -79,10 +81,12 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: plugin-${{ github.sha }}
           path: dist
+      - name: Verify checksums
+        run: cd dist && sha256sum -c SHA256SUMS
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}

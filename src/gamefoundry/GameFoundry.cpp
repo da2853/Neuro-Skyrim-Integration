@@ -23,6 +23,22 @@ namespace gamefoundry
             long        inputEchoMs{ 50 };
         };
 
+        std::optional<std::string> GetEnv(const char* name)
+        {
+            char*       buf = nullptr;
+            std::size_t len = 0;
+            if (_dupenv_s(&buf, &len, name) != 0 || !buf)
+                return std::nullopt;
+            std::string value(buf);
+            std::free(buf);
+            return value;
+        }
+
+        const char* CStr(const std::optional<std::string>& s)
+        {
+            return s ? s->c_str() : nullptr;
+        }
+
         std::optional<std::string> ReadIni(std::string_view key)
         {
             // Same relative path upstream uses (the game directory is the CWD).
@@ -36,9 +52,9 @@ namespace gamefoundry
         {
             static const Settings s = [] {
                 Settings out;
-                out.wsUrl = core::resolve_ws_url(std::getenv("NEURO_SDK_WS_URL"), ReadIni("wsUrl"));
-                out.inputEcho = core::resolve_long(std::getenv("GF_INPUT_ECHO"), ReadIni("inputEcho"), 1, 0, 1) != 0;
-                out.inputEchoMs = core::resolve_long(std::getenv("GF_INPUT_ECHO_MS"), ReadIni("inputEchoMs"), 50, 10, 1000);
+                out.wsUrl = core::resolve_ws_url(CStr(GetEnv("NEURO_SDK_WS_URL")), ReadIni("wsUrl"));
+                out.inputEcho = core::resolve_long(CStr(GetEnv("GF_INPUT_ECHO")), ReadIni("inputEcho"), 1, 0, 1) != 0;
+                out.inputEchoMs = core::resolve_long(CStr(GetEnv("GF_INPUT_ECHO_MS")), ReadIni("inputEchoMs"), 50, 10, 1000);
                 REX::INFO("GameFoundry: wsUrl={} inputEcho={} inputEchoMs={}", out.wsUrl, out.inputEcho, out.inputEchoMs);
                 return out;
             }();
