@@ -3,7 +3,8 @@
 // GameFoundry fork hooks. Upstream files call into these with one line each:
 //   Socket.cpp  NeuroSocket::Initialize   -> gamefoundry::WebSocketUrl()   (patch 0)
 //   main.cpp    kDataLoaded               -> gamefoundry::OnDataLoaded()   (patch 2)
-//   main.cpp    OnUpdateHook::OnUpdateMod -> gamefoundry::OnFrame()        (patches 1 and 2)
+//   main.cpp    OnUpdateHook::OnUpdateMod -> gamefoundry::OnFrame()        (patches 1, 2 and 3)
+//   Socket.cpp  action lists, registration, dispatch -> gamefoundry/Actions.hpp (patch 3)
 // See GAMEFOUNDRY.md.
 
 namespace gamefoundry
