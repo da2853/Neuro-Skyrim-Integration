@@ -1,5 +1,6 @@
 #include "gamefoundry/GameFoundry.hpp"
 #include "gamefoundry/core.hpp"
+#include "gamefoundry/Actions.hpp"
 
 #include "Socket.hpp"
 #include "main.hpp"
@@ -390,5 +391,7 @@ namespace gamefoundry
             InputEcho::GetSingleton()->Flush(now);
         if (g_dataLoaded && GetSettings().telemetry)
             Telemetry::GetSingleton()->Tick(now);
+        if (g_dataLoaded)
+            TickActions(); // patch 3: move / turn / enter_door
     }
 }

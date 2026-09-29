@@ -3,6 +3,7 @@
 
 #include "Socket.hpp"
 #include "gamefoundry/GameFoundry.hpp"
+#include "gamefoundry/Actions.hpp"
 #include <neurosdk.h>
 #include <string>
 #include <string_view>
@@ -222,7 +223,8 @@ neurosdk_action ActionsList[] = {
 
 
                                     Capabilities::GetObjectsAround::Action, //idk about this one
-                                    Capabilities::GoToLocation::Action
+                                    Capabilities::GoToLocation::Action,
+                                    GF_EXTRA_ACTIONS // GameFoundry patch 3
                                 };
 
 neurosdk_action ActionsListNoForces[] = {
@@ -273,7 +275,8 @@ neurosdk_action ActionsListNoForces[] = {
                                     Capabilities::VampirelordSwitchUp::Action,
 
                                     Capabilities::GetObjectsAround::Action, //idk about this one
-                                    Capabilities::GoToLocation::Action
+                                    Capabilities::GoToLocation::Action,
+                                    GF_EXTRA_ACTIONS // GameFoundry patch 3
 };
 
 
@@ -752,6 +755,7 @@ bool neuro::NeuroSocket::register_allowed_actions(bool reconnect)
                             }
                         }
                         
+                        action_pos = gamefoundry::RegisterActions(actions_to_register, action_pos); // GameFoundry patch 3
                         actions_to_register[action_pos] = Capabilities::GetObjectsAround::Action; action_pos++;
                         if (Observer::can_surrender_to_guards())
                         {
@@ -1687,6 +1691,7 @@ bool neuro::NeuroSocket::Tick(float dtime) //const neurosdk_message_action_t& aC
                         }
                         else
                         {
+                            if (gamefoundry::HandleAction(name, messageQueue[i].value.action.data, command_result, failed_to_parse_json)) {} // GameFoundry patch 3
                             if (name == Capabilities::StartSneak::Name)
                             {
                                 command_result = WalkerProcessor::turn_sneak_on();

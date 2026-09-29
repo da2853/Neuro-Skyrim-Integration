@@ -18,6 +18,7 @@ upstream merges stay clean:
 | `src/Socket.cpp` | patch 0: `desc.url = gamefoundry::WebSocketUrl()` instead of the hard-coded `ws://localhost:8000` |
 | `src/main.cpp` | patch 2: `gamefoundry::OnDataLoaded()` on `kDataLoaded`, `gamefoundry::OnFrame()` in the update hook (patch 1 runs from the same two hooks) |
 | `xmake.lua` | skip the copy-into-game step when `SKYRIM_PATH` is unset (CI) |
+| `src/Socket.cpp` | patch 3: `GF_EXTRA_ACTIONS` appended to `ActionsList` and `ActionsListNoForces`; `gamefoundry::RegisterActions()` where `walk_to_object` is registered; `gamefoundry::HandleAction()` in the action dispatch (player alive, no force) |
 
 ## Settings
 
@@ -137,3 +138,24 @@ c++ -std=c++20 -Wall -Wextra -Werror -I src gamefoundry/tests/test_core.cpp -o t
    `context` messages starting with `[gf:input/v1]`.
 5. Every 100 ms the server receives a silent `context` message starting with
    `[gf:telemetry/v1]`; the SKSE log shows the per-minute telemetry line.
+
+## Patch 3: agent actions (`move`, `turn`, `enter_door`)
+
+Upstream's actions all walk to a target chosen by id, so an agent that the
+walker cannot get past something has no way to step around it, and in the
+Helgen intro (MQ101 stage < 200) upstream turns every interaction into a plain
+walk ("Your hands are bound"), which leaves the keep doors impassable. Patch 3
+adds three actions in `src/gamefoundry/Actions.cpp`, registered only where
+upstream registers `walk_to_object` (so never in the cutscenes before the
+player can walk):
+
+| Action | Arguments | Registered when | Behaviour | End message (non-silent context) |
+| --- | --- | --- | --- | --- |
+| `move` | `direction`: `forward`/`back`/`left`/`right`, `seconds` 0.3-5 | movement controls enabled | resets the walker, then holds the mapped key for the time given (paused time does not count) | `[You walked forward 2.4 m]`, with `: something blocks the way` under 0.3 m |
+| `turn` | `degrees` -180..180, positive = right | looking controls enabled | resets the walker, then turns the player at 150 deg/s with `Actor::SetHeading` | `[You turned right 90 degrees]` |
+| `enter_door` | `id` (a door in the object list) | `is_intro2()` (outside the intro `walk_to_object_and_interact` opens doors) | activates the door with `TESObjectREFR::ActivateRef` if within 200 units, else walks there with the upstream walker (interaction 0) and activates it on arrival; 40 s timeout | `[You opened [id N] Name]` or `[Couldnt reach the door. ...]` |
+
+The immediate `action/result` is `[You start walking forward...]`,
+`[You start turning...]`, `[You open the door...]` or `[You walk to the
+door...]`; failures (`You cannot walk right now`, `This object is not a door`,
+...) come back as `success: false`.
