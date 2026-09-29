@@ -14,10 +14,10 @@
 
 namespace gamefoundry
 {
-    namespace
+    // Action arguments, parsed by glaze reflection (which needs external linkage,
+    // so not in the anonymous namespace below).
+    namespace args
     {
-        using Clock = std::chrono::steady_clock;
-
         struct MoveArgs
         {
             std::string direction{};
@@ -33,6 +33,14 @@ namespace gamefoundry
         {
             int id{};
         };
+    }
+
+    namespace
+    {
+        using Clock = std::chrono::steady_clock;
+        using args::DoorArgs;
+        using args::MoveArgs;
+        using args::TurnArgs;
 
         constexpr float kPi = 3.14159265358979f;
         constexpr float kUnitsPerMeter = 70.0f;  // Skyrim: ~70 units to a metre
