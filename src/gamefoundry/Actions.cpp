@@ -47,6 +47,8 @@ namespace gamefoundry
         constexpr float kTurnDegPerSec = 150.0f; // smooth, like a mouse turn
         constexpr float kDoorReach = 200.0f;     // activation range for doors
         constexpr float kDoorTimeoutS = 40.0f;
+        constexpr float kDoorOpenWaitS = 0.8f;   // let the door swing open
+        constexpr float kDoorPassS = 2.5f;       // walking time through the doorway
 
         struct MoveState
         {
@@ -65,12 +67,27 @@ namespace gamefoundry
             float totalDeg{};
         };
 
+        // enter_door: approach with the walker, open it if closed, then either
+        // activate it (a load door: the game changes cell) or face the doorway
+        // and walk through (an ordinary door, e.g. into the Helgen keep tower).
+        enum class DoorPhase
+        {
+            Approach,
+            Opening,
+            Passing
+        };
+
         struct DoorState
         {
             bool                 active{ false };
             RE::ObjectRefHandle  door{};
             int                  id{};
             float                elapsed{};
+            DoorPhase            phase{ DoorPhase::Approach };
+            float                phaseTime{};
+            bool                 load{ false };
+            int32_t              forwardKey{ -1 };
+            float                held{};
         };
 
         MoveState         g_move;
@@ -121,6 +138,9 @@ namespace gamefoundry
             if (g_move.active && g_move.key >= 0)
                 RE::BSInputEventQueue::GetSingleton()->AddButtonEvent(
                     RE::INPUT_DEVICES::kKeyboard, g_move.key, 0.0f, g_move.held);
+            if (g_door.active && g_door.phase == DoorPhase::Passing && g_door.forwardKey >= 0)
+                RE::BSInputEventQueue::GetSingleton()->AddButtonEvent(
+                    RE::INPUT_DEVICES::kKeyboard, g_door.forwardKey, 0.0f, g_door.held);
             g_move = {};
             g_turn = {};
             g_door = {};
@@ -164,11 +184,53 @@ namespace gamefoundry
             return { true, "[You start turning...]" };
         }
 
-        void Activate(RE::TESObjectREFR* door, RE::PlayerCharacter* player, int id)
+        bool IsLoadDoor(RE::TESObjectREFR* door)
+        {
+            return door->extraList.GetByType(RE::ExtraDataType::kTeleport) != nullptr;
+        }
+
+        bool IsClosed(RE::TESObjectREFR* door)
+        {
+            return RE::BGSOpenCloseForm::GetOpenState(door) != RE::BGSOpenCloseForm::OPEN_STATE::kOpen;
+        }
+
+        std::string DoorLabel(RE::TESObjectREFR* door, int id)
+        {
+            return "[id " + std::to_string(id) + "] " + door->GetDisplayFullName();
+        }
+
+        // Face the door (yaw 0 = +Y, clockwise, radians) and start walking through it.
+        void BeginPassing(RE::TESObjectREFR* door, RE::PlayerCharacter* player)
         {
             WalkerProcessor::reset_walker();
-            door->ActivateRef(player, 0, nullptr, 1, false);
-            send_random_context("[You opened [id " + std::to_string(id) + "] " + door->GetDisplayFullName() + "]", false);
+            auto d = door->GetPosition() - player->GetPosition();
+            player->SetHeading(std::atan2(d.x, d.y));
+            g_door.phase = DoorPhase::Passing;
+            g_door.phaseTime = 0.0f;
+            g_door.held = 0.0f;
+            g_door.forwardKey = KeyFor("forward");
+        }
+
+        // Called once the player is within reach of the door.
+        void AtDoor(RE::TESObjectREFR* door, RE::PlayerCharacter* player)
+        {
+            if (g_door.load)
+            {
+                WalkerProcessor::reset_walker();
+                door->ActivateRef(player, 0, nullptr, 1, false);
+                send_random_context("[You opened " + DoorLabel(door, g_door.id) + "]", false);
+                g_door = {};
+                return;
+            }
+            if (IsClosed(door))
+            {
+                WalkerProcessor::reset_walker();
+                door->ActivateRef(player, 0, nullptr, 1, false);
+                g_door.phase = DoorPhase::Opening;
+                g_door.phaseTime = 0.0f;
+                return;
+            }
+            BeginPassing(door, player);
         }
 
         std::pair<bool, std::string> StartEnterDoor(const DoorArgs& a)
@@ -190,20 +252,24 @@ namespace gamefoundry
                 return Fail("This object is not a door. Use walk_to_object_and_interact for other objects");
 
             StopAll();
-            if (player->GetPosition().GetDistance(door->GetPosition()) <= kDoorReach)
-            {
-                Activate(door, player, a.id);
-                return { true, "[You open the door...]" };
-            }
-            // Walk there with the plugin's own walker (interaction 0 works in the
-            // intro too), then activate from OnFrame once in reach.
-            auto walk = WalkerProcessor::walk_to_object_by_index(a.id, 0);
-            if (!walk.first)
-                return walk;
             g_door.active = true;
             g_door.door = door->GetHandle();
             g_door.id = a.id;
-            g_door.elapsed = 0.0f;
+            g_door.load = IsLoadDoor(door);
+            g_door.phase = DoorPhase::Approach;
+            if (player->GetPosition().GetDistance(door->GetPosition()) <= kDoorReach)
+            {
+                AtDoor(door, player);
+                return { true, "[You go through the door...]" };
+            }
+            // Walk there with the plugin's own walker (interaction 0 works in the
+            // intro too); OnFrame takes over once in reach.
+            auto walk = WalkerProcessor::walk_to_object_by_index(a.id, 0);
+            if (!walk.first)
+            {
+                g_door = {};
+                return walk;
+            }
             return { true, "[You walk to the door...]" };
         }
 
@@ -323,22 +389,54 @@ namespace gamefoundry
         if (g_door.active)
         {
             g_door.elapsed += dt;
-            auto door = g_door.door.get();
+            g_door.phaseTime += dt;
+            auto doorPtr = g_door.door.get();
+            RE::TESObjectREFR* door = doorPtr.get();
             if (!door)
             {
+                StopAll();
                 send_random_context("[The door is gone]", false);
-                g_door = {};
             }
-            else if (player->GetPosition().GetDistance(door->GetPosition()) <= kDoorReach)
+            else if (g_door.phase == DoorPhase::Approach)
             {
-                int id = g_door.id;
-                g_door = {};
-                Activate(door.get(), player, id);
+                if (player->GetPosition().GetDistance(door->GetPosition()) <= kDoorReach)
+                    AtDoor(door, player);
+                else if (g_door.elapsed > kDoorTimeoutS)
+                {
+                    StopAll();
+                    send_random_context("[Couldnt reach the door. Try move forward or another way]", false);
+                }
             }
-            else if (g_door.elapsed > kDoorTimeoutS)
+            else if (g_door.phase == DoorPhase::Opening)
             {
-                send_random_context("[Couldnt reach the door. Try move forward or another way]", false);
-                g_door = {};
+                if (g_door.phaseTime >= kDoorOpenWaitS)
+                {
+                    if (IsClosed(door))
+                    {
+                        std::string label = DoorLabel(door, g_door.id);
+                        StopAll();
+                        send_random_context("[" + label + " does not open. It may be locked or barred]", false);
+                    }
+                    else
+                        BeginPassing(door, player);
+                }
+            }
+            else // Passing
+            {
+                auto queue = RE::BSInputEventQueue::GetSingleton();
+                if (g_door.forwardKey >= 0 && g_door.phaseTime < kDoorPassS)
+                {
+                    queue->AddButtonEvent(RE::INPUT_DEVICES::kKeyboard, g_door.forwardKey, 1.0f, g_door.held);
+                    g_door.held += dt;
+                }
+                else
+                {
+                    if (g_door.forwardKey >= 0)
+                        queue->AddButtonEvent(RE::INPUT_DEVICES::kKeyboard, g_door.forwardKey, 0.0f, g_door.held);
+                    std::string label = DoorLabel(door, g_door.id);
+                    g_door = {};
+                    send_random_context("[You went through " + label + "]", false);
+                }
             }
         }
     }

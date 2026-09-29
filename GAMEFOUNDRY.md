@@ -153,9 +153,9 @@ player can walk):
 | --- | --- | --- | --- | --- |
 | `move` | `direction`: `forward`/`back`/`left`/`right`, `seconds` 0.3-5 | movement controls enabled | resets the walker, then holds the mapped key for the time given (paused time does not count) | `[You walked forward 2.4 m]`, with `: something blocks the way` under 0.3 m |
 | `turn` | `degrees` -180..180, positive = right | looking controls enabled | resets the walker, then turns the player at 150 deg/s with `Actor::SetHeading` | `[You turned right 90 degrees]` |
-| `enter_door` | `id` (a door in the object list) | `is_intro2()` (outside the intro `walk_to_object_and_interact` opens doors) | activates the door with `TESObjectREFR::ActivateRef` if within 200 units, else walks there with the upstream walker (interaction 0) and activates it on arrival; 40 s timeout | `[You opened [id N] Name]` or `[Couldnt reach the door. ...]` |
+| `enter_door` | `id` (a door in the object list) | `is_intro2()` (outside the intro `walk_to_object_and_interact` opens doors) | walks to the door with the upstream walker (interaction 0) until within 200 units (40 s timeout). A load door (`ExtraTeleport`) is then activated with `TESObjectREFR::ActivateRef`. An ordinary door is opened first if closed (`ActivateRef`, 0.8 s), then the player faces it and walks forward 2.5 s through the doorway | `[You opened [id N] Name]` (load door), `[You went through [id N] Name]`, `[[id N] Name does not open. ...]` or `[Couldnt reach the door. ...]` |
 
 The immediate `action/result` is `[You start walking forward...]`,
-`[You start turning...]`, `[You open the door...]` or `[You walk to the
+`[You start turning...]`, `[You go through the door...]` or `[You walk to the
 door...]`; failures (`You cannot walk right now`, `This object is not a door`,
 ...) come back as `success: false`.
