@@ -74,6 +74,7 @@ namespace gamefoundry
         {
             Approach,
             Opening,
+            Facing,
             Passing
         };
 
@@ -88,6 +89,7 @@ namespace gamefoundry
             bool                 load{ false };
             int32_t              forwardKey{ -1 };
             float                held{};
+            float                targetHeading{}; // radians, toward the door
         };
 
         MoveState         g_move;
@@ -199,16 +201,26 @@ namespace gamefoundry
             return "[id " + std::to_string(id) + "] " + door->GetDisplayFullName();
         }
 
-        // Face the door (yaw 0 = +Y, clockwise, radians) and start walking through it.
+        // Turn toward the door (yaw 0 = +Y, clockwise, radians) at turn's speed,
+        // then walk through it. An instant SetHeading looked like a camera snap.
         void BeginPassing(RE::TESObjectREFR* door, RE::PlayerCharacter* player)
         {
             WalkerProcessor::reset_walker();
             auto d = door->GetPosition() - player->GetPosition();
-            player->SetHeading(std::atan2(d.x, d.y));
-            g_door.phase = DoorPhase::Passing;
+            g_door.targetHeading = std::atan2(d.x, d.y);
+            g_door.phase = DoorPhase::Facing;
             g_door.phaseTime = 0.0f;
             g_door.held = 0.0f;
             g_door.forwardKey = KeyFor("forward");
+        }
+
+        // Signed smallest angle from `from` to `to`, radians, in (-pi, pi].
+        float AngleTo(float from, float to)
+        {
+            float a = std::fmod(to - from + kPi, 2.0f * kPi);
+            if (a < 0.0f)
+                a += 2.0f * kPi;
+            return a - kPi;
         }
 
         // Called once the player is within reach of the door.
@@ -420,6 +432,19 @@ namespace gamefoundry
                     else
                         BeginPassing(door, player);
                 }
+            }
+            else if (g_door.phase == DoorPhase::Facing)
+            {
+                float left = AngleTo(player->data.angle.z, g_door.targetHeading);
+                float step = kTurnDegPerSec * kPi / 180.0f * dt;
+                if (std::fabs(left) <= step || g_door.phaseTime > 3.0f)
+                {
+                    player->SetHeading(g_door.targetHeading);
+                    g_door.phase = DoorPhase::Passing;
+                    g_door.phaseTime = 0.0f;
+                }
+                else
+                    player->SetHeading(player->data.angle.z + (left < 0.0f ? -step : step));
             }
             else // Passing
             {
