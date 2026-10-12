@@ -7,7 +7,18 @@
 #include "main.hpp"
 #include "ApocryphaRedirects.hpp"
 
+
 namespace Observer {
+
+	bool dlc2_ahzidal_ring2_disagreed_to_solve_puzzle = false;
+
+	long long dlc2_book_darkness_damage_advice_timestamp = 0; //dont need to reset
+
+	bool old_vahlok_platform_disabled_1 = false;
+	bool old_vahlok_platform_disabled_2 = false;
+	bool old_vahlok_platform_disabled_3 = false;
+	bool old_vahlok_platform_disabled_4 = false;
+
 
 	RE::ObjectRefHandle high_damage_enemy{};
 
@@ -19,9 +30,20 @@ namespace Observer {
 	int old_da04_septimus_scene_phase = 0;
 	int old_mq206_alduin_scene_phase1 = 0;
 	int old_mq206_alduin_scene_phase2 = 0;
+	int old_tg05sp_scene_phase = 0;
 
 	int old_mq301_scene_phase = 0;
 	int old_mq306_scene_phase = 0;
+
+
+	bool old_dlc2sv01_puzzle1 = false;
+	bool old_dlc2sv01_puzzle2 = false;
+	bool old_dlc2sv01_puzzle3 = false;
+
+	bool old_dlc2sv01_puzzle4 = false;
+	bool old_dlc2sv01_puzzle5 = false;
+	bool old_dlc2sv01_puzzle6 = false;
+	bool old_dlc2sv01_puzzle7 = false;
 
 
 	long long last_use_potion_timestamp = 0;
@@ -45,6 +67,7 @@ namespace Observer {
 
 	int old_dlc2mq06_stage = 0;
 
+	int old_mq101dragonattack_stage = 0;
 
 	RE::BGSLocation* old_player_loc = nullptr;
 
@@ -92,6 +115,10 @@ namespace Observer {
 	bool surroundings_scanned = false;
 
 	float no_threats_timer = 0.0f;
+
+	bool detect_threats_special = false;
+	long long deployed_special_weapon_timestamp = 0;
+
 
 	float detect_threats_time = -0.125f;
 	bool threats_response_request_sent = false;
@@ -193,6 +220,7 @@ namespace Observer {
 	bool puzzle_request_was_sent = false;
 	bool puzzle_choice_valid = false;
 	int puzzle_choice = -1;
+	std::vector<int> puzzle_choice_array{};
 	RE::TESObjectREFR* puzzle_target = nullptr;
 
 
@@ -244,6 +272,17 @@ namespace Observer {
 	std::map<RE::ActorValue, long long> magic_resist_potions_to_use{};
 
 
+	bool get_dlc2_ahzidal_ring2_disagreed_to_solve_puzzle()
+	{
+		return dlc2_ahzidal_ring2_disagreed_to_solve_puzzle;
+	}
+
+	void set_dlc2_ahzidal_ring2_disagreed_to_solve_puzzle(bool set)
+	{
+		dlc2_ahzidal_ring2_disagreed_to_solve_puzzle = set;
+	}
+
+
 	void notify_player_hit_by_weapon(RE::TESForm* weapon)
 	{
 		check_health_decrease_after_hit = true;
@@ -260,6 +299,12 @@ namespace Observer {
 	}
 
 
+	long long get_deployed_special_weapon_timestamp()
+	{
+		return deployed_special_weapon_timestamp;
+	}
+
+
 	int get_same_place_death_count()
 	{
 		return same_place_death_count;
@@ -272,8 +317,94 @@ namespace Observer {
 		puzzle_request_was_sent = false;
 		puzzle_choice_valid = false;
 		puzzle_choice = -1;
+		puzzle_choice_array.clear();
 		puzzle_target = nullptr;
 	}
+
+
+
+	void set_puzzle_target(RE::TESObjectREFR* target)
+	{
+		puzzle_target = target;
+	}
+
+
+
+
+	std::pair<bool, std::string> set_quest_puzzle_choice_array(std::vector<int> choices)
+	{
+		std::pair<bool, std::string> result{};
+
+		if (!puzzle_request_was_sent)
+		{
+			reset_quest_puzzles();
+			result.first = true;
+			result.second = "[Error]";
+			return result;
+		}
+		else
+		{
+			switch (active_puzzle)
+			{
+
+			case 8:
+			{
+				int choices_size = std::size(choices);
+
+				if (choices_size < 2)
+				{
+					result.first = false;
+					result.second = "Too few pressure plates selected!";
+					return result;
+				}
+
+				if (choices_size > 20)
+				{
+					result.first = false;
+					result.second = "Too many pressure plates selected!";
+					return result;
+				}
+
+				for (auto choice : choices)
+				{
+					if (choice < 1 || choice > 9)
+					{
+						result.first = false;
+						result.second = "Invalid pressure plate index! Valid range: from 1 to 9";
+						return result;
+					}
+				}
+
+
+				puzzle_choice_array = choices;
+				puzzle_choice_valid = true;
+				result.first = true;
+				result.second = "[Processing...]";
+
+				break;
+			}
+				
+
+			default:
+			{
+				reset_quest_puzzles();
+				result.first = true;
+				result.second = "[Error]";
+				break;
+			}
+			}
+
+
+
+		}
+
+
+		return result;
+	}
+
+
+
+
 
 
 	std::pair<bool, std::string> set_quest_puzzle_choice(int id)
@@ -349,6 +480,37 @@ namespace Observer {
 				break;
 			}
 
+			case 7:
+			case 13:
+			{
+				min_range = 1;
+				max_range = 2;
+
+				break;
+			}
+
+			//case 8 is fire platforms vahloks tomb uses array choice
+
+			case 9:
+			case 10:
+			case 11:
+			case 12:
+			{
+				min_range = 1;
+				max_range = 4;
+
+				break;
+			}
+
+			case 14:
+			{
+				min_range = 1;
+				max_range = 4;
+
+				break;
+			}
+
+
 			default:
 			{
 				reset_quest_puzzles();
@@ -391,6 +553,14 @@ namespace Observer {
 
 	float not_processing_ustengrev_time = 0.0f;
 	float pause_puzzle_scan_time = 0.0f;
+
+
+
+	bool is_puzzle_scanner_paused()
+	{
+		return pause_puzzle_scan_time > 0.0f;
+	}
+
 
 	void timed_quest_puzzles_processor(float dtime)
 	{
@@ -1096,6 +1266,489 @@ namespace Observer {
 
 
 
+			case 7:
+			{
+				if (!puzzle_request_was_sent)
+				{
+					std::vector<MenuOption> options{};
+					options.push_back({ 1, "Loot draugr" });
+					options.push_back({ 2, "Drag draugr to the Metal Gate above a fire pit" });
+
+					auto player = RE::PlayerCharacter::GetSingleton();
+
+					unregister_all_actions(); //no pause - unregister here
+
+					if (force_choice(options, "What do you want to do with this draugr?", force_type::timed_quest_puzzle))
+					{
+						puzzle_request_was_sent = true;
+					}
+				}
+				else
+				{
+					if (puzzle_choice_valid)
+					{
+
+						register_allowed_actions();
+
+						pause_puzzle_scan_time = 5.0f;
+
+						switch (puzzle_choice)
+						{
+
+						case 1:
+						{
+							register_allowed_actions();
+
+							if (puzzle_target)
+							{
+								WalkerProcessor::walk_to_object_by_refr(puzzle_target, 1);
+							}
+							
+							pause_puzzle_scan_time = 10.0f;
+							reset_quest_puzzles();
+							break;
+						}
+						case 2:
+						{
+							register_allowed_actions();
+
+							auto drop_marker = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4025aa3);
+
+							if (puzzle_target && drop_marker)
+							{
+								WalkerProcessor::drop_some_item_onto_position({ 9190.80273, -456.800079, -256.522186 }, drop_marker, puzzle_target);
+							}
+							else
+							{
+								send_random_context("Error! Target lost!");
+							}
+
+							pause_puzzle_scan_time = 10.0f;
+							reset_quest_puzzles();
+							break;
+						}
+						
+						default:
+						{
+							register_allowed_actions();
+
+							reset_quest_puzzles();
+							break;
+						}
+						}
+					}
+				}
+
+
+				break;
+			}
+
+
+			case 8:
+			{
+				if (!puzzle_request_was_sent)
+				{
+					std::vector<MenuOption> options{};
+
+					auto player = RE::PlayerCharacter::GetSingleton();
+
+					unregister_all_actions(); //no pause - unregister here
+
+					if (force_choice(options, "You see nine pressure plates on the floor, arranged in 3x3 grid... It seems that you can try to walk on them... Tharstan told you, that tablet here says: Continue along the path, don't tread where you've been... Select pressure plates you want to walk on, you will walk on them in order that you chose. (Pressure plates are numbered from 1 to 9, where 1 is top left and 9 is bottom right)", force_type::timed_quest_puzzle_array))
+					{
+						puzzle_request_was_sent = true;
+					}
+				}
+				else
+				{
+					if (puzzle_choice_valid)
+					{
+
+						//register_allowed_actions(); //custom walk required, dont register right away
+
+						pause_puzzle_scan_time = 5.0f;
+
+						std::vector<RE::NiPoint3> pressure_plate_positions{};
+
+
+						//their ids are not in order i chose so do it like this
+						auto pressure_plate = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4027115);
+						if (pressure_plate) pressure_plate_positions.push_back(pressure_plate->GetPosition());
+
+						pressure_plate = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4027116);
+						if (pressure_plate) pressure_plate_positions.push_back(pressure_plate->GetPosition());
+
+						pressure_plate = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4027117);
+						if (pressure_plate) pressure_plate_positions.push_back(pressure_plate->GetPosition());
+
+						pressure_plate = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4027112);
+						if (pressure_plate) pressure_plate_positions.push_back(pressure_plate->GetPosition());
+
+						pressure_plate = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4027113);
+						if (pressure_plate) pressure_plate_positions.push_back(pressure_plate->GetPosition());
+
+						pressure_plate = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4027114);
+						if (pressure_plate) pressure_plate_positions.push_back(pressure_plate->GetPosition());
+
+						pressure_plate = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4027111);
+						if (pressure_plate) pressure_plate_positions.push_back(pressure_plate->GetPosition());
+
+						pressure_plate = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4027110);
+						if (pressure_plate) pressure_plate_positions.push_back(pressure_plate->GetPosition());
+
+						pressure_plate = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x402710f);
+						if (pressure_plate) pressure_plate_positions.push_back(pressure_plate->GetPosition());
+
+
+						if (std::size(pressure_plate_positions) < 9)
+						{
+							send_random_context("Error! Pressure plate positioning error", false);
+							register_allowed_actions();
+							reset_quest_puzzles();
+							return;
+						}
+
+						std::vector<RE::NiPoint3> positions_to_walk_to{};
+
+						for (auto choice : puzzle_choice_array)
+						{
+							if (choice >= 1 && choice <= 9)
+							{
+								positions_to_walk_to.push_back(pressure_plate_positions.at(choice - 1));
+							}
+							else
+							{
+								send_random_context("Error! Invalid pressure plate index found", false);
+								register_allowed_actions();
+							}
+						}
+
+						WalkerProcessor::walk_custom_path((RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x402710f), positions_to_walk_to, true, false, true, true, true);
+
+
+						reset_quest_puzzles();
+						
+					}
+				}
+
+
+				break;
+			}
+
+
+
+			case 9:
+			case 10:
+			case 11:
+			case 12:
+			{
+				if (!puzzle_request_was_sent)
+				{
+
+					WalkerProcessor::reset_walker();
+
+					std::vector<MenuOption> options{};
+					options.push_back({ 1, "Normally walk on platforms, waiting for next platform to appear before stepping forward" });
+					options.push_back({ 2, "Slowly walk on platforms, waiting for next platform to appear before stepping forward" });
+					options.push_back({ 3, "Fast-walk on platforms, waiting for next platform to appear before stepping forward" });
+					options.push_back({ 4, "Fast-walk walk on platforms, without waiting for next platform to appear" });
+
+					//options.push_back({ 2, "Use Whirlwind Sprint shout to fly through the gate" });
+					//options.push_back({ 3, "Do nothing" });
+					//options.push_back({ 4, "Jump" });
+					//options.push_back({ 5, "Attack the gate" });
+
+					//unregister_all_actions(); //causes pause - no need to unregister here
+
+					if (force_choice(options, "You pulled the handle, and platforms are about to start appearing above the pit... What will you do?", force_type::timed_quest_puzzle))
+					{
+						if (!puzzle_pause_was_made && !MiscThings::is_game_paused())
+						{
+							puzzle_request_was_sent = true;
+							puzzle_pause_was_made = true;
+							MiscThings::pause_game();
+						}
+					}
+
+				}
+				else
+				{
+					if (puzzle_choice_valid)
+					{
+						if (puzzle_pause_was_made)
+						{
+							if (MiscThings::is_game_paused())
+							{
+								MiscThings::unpause_game();
+							}
+							//set_universal_block(0.5f);
+							puzzle_pause_was_made = false;
+							return;
+
+						}
+
+						switch (puzzle_choice)
+						{
+						case 1:
+						case 2:
+						case 3:
+						case 4:
+						{
+							
+							auto platform1 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x401add1);
+
+							if (active_puzzle == 9)
+								platform1 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x401add1);
+
+							if (active_puzzle == 10)
+								platform1 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4024be4);
+
+							if (active_puzzle == 11)
+								platform1 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4024bee);
+
+							if (active_puzzle == 12)
+								platform1 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4024bf4);
+
+							if (platform1)
+							{
+								WalkerProcessor::walk_custom_path(platform1, { platform1->GetPosition() }, true, false, true, false, false, true, true, puzzle_choice == 2, puzzle_choice == 3 || puzzle_choice == 4, puzzle_choice == 4);
+							}
+							else
+							{
+								send_random_context("Error, cant find the platform!", false);
+								register_allowed_actions();
+							}
+							
+							reset_quest_puzzles();
+							break;
+						}
+						
+						default:
+						{
+							reset_quest_puzzles();
+							break;
+						}
+
+						}
+					}
+				}
+
+
+				break;
+			}
+
+
+			case 13:
+			{
+				if (!puzzle_request_was_sent)
+				{
+					std::vector<MenuOption> options{};
+					options.push_back({ 1, "Loot Balagog" });
+					options.push_back({ 2, "Drag Balagog's body to hide it" });
+
+					auto player = RE::PlayerCharacter::GetSingleton();
+
+					unregister_all_actions(); //no pause - unregister here
+
+					if (force_choice(options, "What do you want to do with Balagog's body?", force_type::timed_quest_puzzle))
+					{
+						puzzle_request_was_sent = true;
+					}
+				}
+				else
+				{
+					if (puzzle_choice_valid)
+					{
+
+						register_allowed_actions();
+
+						pause_puzzle_scan_time = 5.0f;
+
+						switch (puzzle_choice)
+						{
+
+						case 1:
+						{
+							register_allowed_actions();
+
+							if (puzzle_target)
+							{
+								WalkerProcessor::walk_to_object_by_refr(puzzle_target, 1);
+							}
+
+							pause_puzzle_scan_time = 10.0f;
+							reset_quest_puzzles();
+							break;
+						}
+						case 2:
+						{
+							register_allowed_actions();
+
+							auto drop_marker = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x5a86a);
+
+							if (puzzle_target && drop_marker)
+							{
+								WalkerProcessor::drop_some_item_onto_position(drop_marker->GetPosition(), drop_marker, puzzle_target);
+							}
+							else
+							{
+								send_random_context("Error! Target lost!");
+							}
+
+							pause_puzzle_scan_time = 10.0f;
+							reset_quest_puzzles();
+							break;
+						}
+
+						default:
+						{
+							register_allowed_actions();
+
+							reset_quest_puzzles();
+							break;
+						}
+						}
+					}
+				}
+
+
+				break;
+			}
+
+
+
+			case 14:
+			{
+				if (!puzzle_request_was_sent)
+				{
+					std::vector<MenuOption> options{};
+					options.push_back({ 1, "Dont do anything, and go do other quests" });
+					options.push_back({ 2, "Try to walk slowly on each pressure plate" });
+					options.push_back({ 3, "Try to walk normally on each pressure plate" });
+					options.push_back({ 4, "Try to walk fast on each pressure plate" });
+
+
+					auto player = RE::PlayerCharacter::GetSingleton();
+
+					unregister_all_actions(); //no pause - unregister here
+
+					if (force_choice(options, "You see a closed gate, with a Magical Ring behind it on some pedestal... there are no chains or handles connected to this gate, but there are 25 pressure plates in the center of the room, laid out in a 5x5 grid... What will you do?", force_type::timed_quest_puzzle))
+					{
+						puzzle_request_was_sent = true;
+					}
+				}
+				else
+				{
+					if (puzzle_choice_valid)
+					{
+
+						//register_allowed_actions(); //custom walk required, dont register right away
+
+						pause_puzzle_scan_time = 5.0f;
+
+						std::vector<RE::NiPoint3> pressure_plate_positions{};
+
+
+						//their ids are not in order i chose so do it like this
+						std::vector<uint32_t> pressure_plate_formids{};
+						pressure_plate_formids.push_back(0x401dc26);
+						pressure_plate_formids.push_back(0x401dc25);
+						pressure_plate_formids.push_back(0x401dc24);
+						pressure_plate_formids.push_back(0x401dc23);
+						pressure_plate_formids.push_back(0x401dc22);
+
+						pressure_plate_formids.push_back(0x401dc21);
+						pressure_plate_formids.push_back(0x401dc1d);
+						pressure_plate_formids.push_back(0x401dc1c);
+						pressure_plate_formids.push_back(0x401dc1b);
+						pressure_plate_formids.push_back(0x401dc1a);
+
+						pressure_plate_formids.push_back(0x401dc14);
+						pressure_plate_formids.push_back(0x401dc11);
+						pressure_plate_formids.push_back(0x4020cb4);
+						pressure_plate_formids.push_back(0x401dc17);
+						pressure_plate_formids.push_back(0x401dc20);
+
+						pressure_plate_formids.push_back(0x401dc1e);
+						pressure_plate_formids.push_back(0x401dc18);
+						pressure_plate_formids.push_back(0x401dc0f);
+						pressure_plate_formids.push_back(0x401dc12);
+						pressure_plate_formids.push_back(0x401dc15);
+
+						pressure_plate_formids.push_back(0x401dc16);
+						pressure_plate_formids.push_back(0x401dc13);
+						pressure_plate_formids.push_back(0x401dc10);
+						pressure_plate_formids.push_back(0x401dc19);
+						pressure_plate_formids.push_back(0x401dc1f);
+
+
+						for (auto pressure_plate_formid : pressure_plate_formids)
+						{
+							auto pressure_plate = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(pressure_plate_formid);
+							if (pressure_plate)
+								pressure_plate_positions.push_back(pressure_plate->GetPosition());
+							else
+								bool stop_here = false;
+						}
+						
+
+						if (std::size(pressure_plate_positions) < 25)
+						{
+							send_random_context("Error! Pressure plate positioning error", false);
+							register_allowed_actions();
+							reset_quest_puzzles();
+							return;
+						}
+
+
+						switch (puzzle_choice)
+						{
+
+						case 1:
+						{
+							reset_quest_puzzles();
+							register_allowed_actions();
+							set_dlc2_ahzidal_ring2_disagreed_to_solve_puzzle(true);
+							break;
+						}
+						case 2:
+						{
+							WalkerProcessor::walk_custom_path((RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x402710f), pressure_plate_positions, true, false, false, true, true, true, false, true, false);
+							reset_quest_puzzles();
+							break;
+						}
+
+						case 3:
+						{
+							WalkerProcessor::walk_custom_path((RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x402710f), pressure_plate_positions, true, false, false, true, true, true, false, false, false);
+							reset_quest_puzzles();
+							reset_quest_puzzles();
+							break;
+						}
+
+						case 4:
+						{
+							WalkerProcessor::walk_custom_path((RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x402710f), pressure_plate_positions, true, false, false, true, true, true, false, false, true);
+							reset_quest_puzzles();
+							break;
+						}
+
+						default:
+						{
+							register_allowed_actions();
+							reset_quest_puzzles();
+							break;
+						}
+						}
+					}
+				}
+
+
+				break;
+			}
+
+
+
 
 
 			default:
@@ -1349,21 +2002,24 @@ namespace Observer {
 		if (lesser_ward && MiscThings::player_has_spell(lesser_ward))
 			has_ward = true;
 
+		if (detect_threats_special && !MiscThings::is_werewolf() && !MiscThings::is_vampirelord())
+			threat_options.push_back({ 10, "Fight back. Deploy LEGENDARY WEAPON" });
+
 		if (any_attacker_sees_player)
 		{
-			threat_options.push_back({ 1, "Fight back" });
+			threat_options.push_back({ 1, "Fight back, getting close (more agressive)" });
 			if (has_ward && MiscThings::is_dragon(attacker))
-				threat_options.push_back({ 3, "Fight back, and try to block dragonbreath using ward spell" });
+				threat_options.push_back({ 3, "Fight back, and try to block dragonbreath using ward spell (more defensive)" });
 			else
-				threat_options.push_back({ 2, "Fight back, and try to keep distance from enemies" });
+				threat_options.push_back({ 2, "Fight back, and try to keep distance from enemies (more defensive)" });
 		}
 		else
 		{
-			threat_options.push_back({ 1, "Attack them" });
+			threat_options.push_back({ 1, "Attack them, getting close (more agressive)" });
 			if (has_ward && MiscThings::is_dragon(attacker))
-				threat_options.push_back({ 3, "Attack them, and try to block dragonbreath using ward spell" });
+				threat_options.push_back({ 3, "Attack them, and try to block dragonbreath using ward spell (more defensive)" });
 			else
-				threat_options.push_back({ 2, "Attack them, and try to keep distance" });
+				threat_options.push_back({ 2, "Attack them, and try to keep distance (more defensive)" });
 		}
 			
 
@@ -1425,7 +2081,7 @@ namespace Observer {
 
 
 
-			if (id == 1 || id == 4 || id == 5 || (id == 2 && !dragonbreath_mode) || (id == 3 && dragonbreath_mode) || (id == 6 && player_can_be_arrested))
+			if (id == 1 || id == 4 || id == 5 || (id == 2 && !dragonbreath_mode) || (id == 3 && dragonbreath_mode) || (id == 6 && player_can_be_arrested) || (id == 10 && detect_threats_special))
 			{
 				threats_response_choice = id;
 				threats_response_choice_valid = true;
@@ -1640,8 +2296,37 @@ namespace Observer {
 									{
 										register_allowed_actions();
 
-										if (threats_response_choice == 1 || threats_response_choice == 2 || threats_response_choice == 3)
+										if (threats_response_choice == 1 || threats_response_choice == 2 || threats_response_choice == 3 || threats_response_choice == 10)
 										{
+
+											if (threats_response_choice == 10 && !MiscThings::is_werewolf() && !MiscThings::is_vampirelord())
+											{
+												auto special_1 = (RE::TESBoundObject*)RE::TESForm::LookupByID(0x80665ed);
+												auto special_2 = (RE::TESBoundObject*)RE::TESForm::LookupByID(0x806dccb);
+
+												auto actor_equip = RE::ActorEquipManager::GetSingleton();
+												if (special_1 && special_2 && actor_equip)
+												{
+													std::string message = "DEPLOYING ";
+													message += special_1->GetName();
+
+													send_random_context(message, false);
+
+													if (player->GetItemCount(special_1) < 1)
+														player->AddObjectToContainer(special_1, nullptr, 1, nullptr);
+
+													if (player->GetItemCount(special_2) < 100)
+														player->AddObjectToContainer(special_2, nullptr, 1000, nullptr);
+
+													actor_equip->EquipObject(player, special_1, nullptr, 1, nullptr, false, true, true, true);
+													actor_equip->EquipObject(player, special_2, nullptr, 1000, nullptr, false, true, true, true);
+
+
+													deployed_special_weapon_timestamp = std::chrono::steady_clock::now().time_since_epoch().count();
+												}
+											}
+
+
 											runaway_in_a_row = 0;
 											if (DialogueProcessor::is_in_dialogue(nullptr))
 												DialogueProcessor::quit_menu();
@@ -1656,7 +2341,7 @@ namespace Observer {
 													attack_target = first_detected_threat;
 
 
-											keep_distance_mode = threats_response_choice == 2;
+											keep_distance_mode = threats_response_choice == 2 || threats_response_choice == 10;
 											dragonbreath_block_mode = threats_response_choice == 3;
 
 
@@ -2404,6 +3089,7 @@ namespace Observer {
 				detect_interesting_time += dtime;
 
 
+			bool player_has_fishing_rod = MiscThings::player_has_fishing_rod();
 
 			//processing, in small batches
 
@@ -2465,6 +3151,9 @@ namespace Observer {
 							//	raw_object_list.pop_back();
 							//	continue;
 							//}
+
+
+
 
 							if (a_ref->formID == 0x4036ef2 || a_ref->formID == 0x403bd9e) //raven rock house chest and bed
 							{
@@ -2550,6 +3239,45 @@ namespace Observer {
 
 									if (word_of_power && word_of_power != (RE::TESObjectREFR*)(-1) && MiscThings::is_object_valid(a_ref))
 									{
+										if (a_ref->formID == 0x402aa34) //vahlok tomb word of power 1
+										{
+											auto vahlok_quest = (RE::TESQuest*)RE::TESForm::LookupByID(0x4019b4a);
+											if (vahlok_quest)
+											{
+												if (!MiscThings::GetStageDone(vahlok_quest, 325))
+												{
+													raw_object_list.pop_back();
+													continue;
+												}
+													
+											}
+										}
+
+										if (a_ref->formID == 0x402aa28) //vahlok tomb word of power 2
+										{
+											auto vahlok_quest = (RE::TESQuest*)RE::TESForm::LookupByID(0x4019b4a);
+											if (vahlok_quest)
+											{
+												if (!MiscThings::GetStageDone(vahlok_quest, 315))
+												{
+													raw_object_list.pop_back();
+													continue;
+												}
+											}
+										}
+
+										if (a_ref->formID == 0x402747d) //dlc2 unearthed kolbjorn word of power, hide until stage is on phase4 (last)
+										{
+											auto unearthed_quest = (RE::TESQuest*)RE::TESForm::LookupByID(0x401810b);
+											if (unearthed_quest && unearthed_quest->currentStage < 410)
+											{
+												raw_object_list.pop_back();
+												continue;
+											}
+										}
+
+
+
 										std::string info = MiscThings::insert_object_into_list_custom_name("Word of Power, calling for you", a_ref);
 										if (info != "")
 											interesting_buffer.insert_or_assign(a_ref, info);
@@ -2563,6 +3291,55 @@ namespace Observer {
 									{
 										if (!WalkerProcessor::is_fighting() && !WalkerProcessor::is_walking_important_path() && !Observer::threat_response_choice_pending())
 										{
+											if (a_ref->formID == 0x70b85) //snow veil wall, can become annoying in cutscene if not taken
+											{
+												auto control_map = RE::ControlMap::GetSingleton();
+												bool can_walk = control_map ? control_map->enabledControls.any(RE::UserEvents::USER_EVENT_FLAG::kMovement) : false;
+												if (!can_walk)
+												{
+													raw_object_list.pop_back();
+													continue;
+												}
+											}
+											
+											if (a_ref->formID == 0x402aa34) //vahlok tomb word of power 1
+											{
+												auto vahlok_quest = (RE::TESQuest*)RE::TESForm::LookupByID(0x4019b4a);
+												if (vahlok_quest)
+												{
+													if (!MiscThings::GetStageDone(vahlok_quest, 325))
+													{
+														raw_object_list.pop_back();
+														continue;
+													}
+												}
+											}
+
+											if (a_ref->formID == 0x402aa28) //vahlok tomb word of power 2
+											{
+												auto vahlok_quest = (RE::TESQuest*)RE::TESForm::LookupByID(0x4019b4a);
+												if (vahlok_quest)
+												{
+													if (!MiscThings::GetStageDone(vahlok_quest, 315))
+													{
+														raw_object_list.pop_back();
+														continue;
+													}
+												}
+											}
+
+
+											if (a_ref->formID == 0x402747d) //dlc2 unearthed kolbjorn word of power, hide until stage is on phase4 (last)
+											{
+												auto unearthed_quest = (RE::TESQuest*)RE::TESForm::LookupByID(0x401810b);
+												if (unearthed_quest && unearthed_quest->currentStage < 410)
+												{
+													raw_object_list.pop_back();
+													continue;
+												}
+											}
+
+
 											float word_of_power_range = 2000.0f;
 
 											auto extra_primitive = (RE::ExtraPrimitive*)a_ref->extraList.GetByType(RE::ExtraDataType::kPrimitive);
@@ -2908,7 +3685,7 @@ namespace Observer {
 													auto riverwood_fishing = RE::TESObjectREFR::LookupByID(0x0500081e);
 
 													//if (fiftyfifty && MiscThings::raycastable(a_ref, 1000.0f, true) && name.find("Fishing Supplies") != std::string::npos && !WalkerProcessor::is_fighting() && !WalkerProcessor::is_walking_important_path() && (MiscThings::player_has_fishing_rod() || a_ref == riverwood_fishing))
-													if (fiftyfifty && name.find("Fishing Supplies") != std::string::npos && !WalkerProcessor::is_fighting() && !WalkerProcessor::is_walking_important_path() && (MiscThings::player_has_fishing_rod() || a_ref == riverwood_fishing))
+													if (fiftyfifty && name.find("Fishing Supplies") != std::string::npos && !WalkerProcessor::is_fighting() && !WalkerProcessor::is_walking_important_path() && (player_has_fishing_rod || a_ref == riverwood_fishing))
 													{
 														WalkerProcessor::look_at_object_by_refr(a_ref, true, 1.0f);
 														send_random_context("You see: " + info, false);
@@ -3735,10 +4512,12 @@ namespace Observer {
 				scan_distance = 2000.0f;
 
 
+			
 
 
 			if (detect_events_time > 0.1f && std::size(raw_event_object_list) <= 0)
 			{
+
 				//Hooks::add_debug_line("DETECT EVENTS TRIGGERED, DTIME: " + std::to_string(detect_events_time), true);
 
 				detect_events_time = 0.0f;
@@ -3842,6 +4621,7 @@ namespace Observer {
 			//now process in small batches
 
 
+			bool player_has_fishing_rod = MiscThings::player_has_fishing_rod();
 
 			for (int i = 0; i < 100; i++)
 			{
@@ -3937,6 +4717,8 @@ namespace Observer {
 
 											if (a_ref == player_actor)
 											{
+												MiscThings::update_player_collision_groups();
+
 												actor_name = "You";
 
 												if (is_something_registered() && get_active_force() == -1 && !MiscThings::have_force_only_menu_open() && !WalkerProcessor::is_walking_important_path() && !MiscThings::is_intro() && !MiscThings::is_intro2())
@@ -4442,6 +5224,35 @@ namespace Observer {
 												}
 
 
+												if (a_ref->formID == 0x4017377 || a_ref->formID == 0x4017378 || a_ref->formID == 0x4017379) 
+												{
+													
+
+													if (activation == 0)
+													{
+														std::string info = MiscThings::insert_object_into_list_and_get_info(a_ref);
+														detect_events_result.push_back(info + " activated!");
+
+
+
+														if (a_ref->formID == 0x4017377)
+															MiscThings::insert_object_into_list_custom_name(" Red Glowing Stone (activated)", a_ref);
+
+														if (a_ref->formID == 0x4017378)
+															MiscThings::insert_object_into_list_custom_name(" Green Glowing Stone (activated)", a_ref);
+
+														if (a_ref->formID == 0x4017379)
+															MiscThings::insert_object_into_list_custom_name(" Blue Glowing Stone (activated)", a_ref);
+
+
+
+
+													}
+
+												}
+
+
+
 
 												RE::TESObjectREFR* redirect_bar = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x89c14);
 
@@ -4696,6 +5507,14 @@ namespace Observer {
 															{
 																std::string name = MiscThings::insert_object_into_list_custom_name("Apocrypha Bridge", a_ref);
 
+																switch (a_ref->formID)
+																{
+																case (0x403250d): //book5 cyclic bridges
+																case (0x403250e):
+																	detect_events_send_result_silent = true;
+																	break;
+																}
+
 																if (activation == 0)
 																	detect_events_result.push_back("[ " + name + " unrolled]");
 
@@ -4708,7 +5527,13 @@ namespace Observer {
 																std::string name = MiscThings::insert_object_into_list_and_get_info(a_ref);
 
 																if (activation == 0)
-																	detect_events_result.push_back("[ " + name + " closed]");
+																{
+																	if (a_ref->formID == 0x4032778)
+																		detect_events_result.push_back("[ " + name + " closed... an Apocrypha Bridge unrolled in the distance]");
+																	else
+																		detect_events_result.push_back("[ " + name + " closed]");
+																}
+																	
 
 																if (activation == 1)
 																	detect_events_result.push_back("[ " + name + " opened]");
@@ -4732,10 +5557,99 @@ namespace Observer {
 																std::string name = MiscThings::insert_object_into_list_custom_name("Apocrypha Gate", a_ref);
 
 																if (activation == 0)
+																{
 																	detect_events_result.push_back("[ " + name + " opened]");
+
+
+																	switch (a_ref->formID) 
+																	{
+
+																	case (0x4034aff)://apocrypha book4 gates in the end. navcuts
+																	{
+																		auto navcut = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x719b56a);
+																		if (navcut)
+																		{
+																			auto current_pos = navcut->GetPosition();
+																			current_pos.z += 1000.0f;
+																			MiscThings::SetPosition_moveto(navcut, current_pos);
+																		}
+
+																		break;
+																	}
+
+																	case (0x4034aef)://apocrypha book4 gates in the end. navcuts
+																	{
+																		auto navcut = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x719b569);
+																		if (navcut)
+																		{
+																			auto current_pos = navcut->GetPosition();
+																			current_pos.z += 1000.0f;
+																			MiscThings::SetPosition_moveto(navcut, current_pos);
+																		}
+
+																		break;
+																	}
+
+
+																	case (0x403cf3e)://gates in apocrypha book4, reveal scrye so its not missed
+																	{
+																		auto scrye = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x403cf41); //scrye
+
+																		if (scrye)
+																		{
+																			if (!MiscThings::is_object_in_the_list(scrye))
+																			{
+																				auto temp_result = MiscThings::insert_object_into_list_and_get_info(scrye);
+																				if (temp_result != "")
+																					send_random_context("You see: " + temp_result, false);
+																			}
+																		}
+																		break;
+																	}
+
+																	case (0x403cf3f)://gates in apocrypha book4, reveal scrye so its not missed
+																	{
+																		auto scrye = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x403cf42); //scrye
+
+																		if (scrye)
+																		{
+																			if (!MiscThings::is_object_in_the_list(scrye))
+																			{
+																				auto temp_result = MiscThings::insert_object_into_list_and_get_info(scrye);
+																				if (temp_result != "")
+																					send_random_context("You see: " + temp_result, false);
+																			}
+																		}
+																		break;
+																	}
+
+																	case (0x403c34a)://gates in apocrypha book4, reveal scrye so its not missed
+																	{
+																		auto scrye = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x403cf43); //scrye
+
+																		if (scrye)
+																		{
+																			if (!MiscThings::is_object_in_the_list(scrye))
+																			{
+																				auto temp_result = MiscThings::insert_object_into_list_and_get_info(scrye);
+																				if (temp_result != "")
+																					send_random_context("You see: " + temp_result, false);
+																			}
+																		}
+																		break;
+																	}
+
+
+																	}
+
+																}
+																	
 
 																if (activation == 1)
 																	detect_events_result.push_back("[ " + name + " closed]");
+
+
+																
 
 															}
 
@@ -5570,6 +6484,15 @@ namespace Observer {
 												detect_events_result.push_back("[ " + name + " emerges from the ground]");
 											}
 
+
+
+											if (new_state.trap_firing == 23)
+											{
+												std::string name = MiscThings::insert_object_into_list_custom_name("Puzzle Pressure Plate", a_ref);
+												detect_events_send_result_silent = false;
+												detect_events_result.push_back("[ " + name + " started spitting fire! Something isnt right...]");
+											}
+
 										}
 
 										if (old_state.destructible_state != new_state.destructible_state)
@@ -5638,6 +6561,20 @@ namespace Observer {
 
 								}
 							}
+
+
+							if (player_has_fishing_rod && MiscThings::is_fishing_supplies(a_ref->GetBaseObject()))
+							{
+								if (!MiscThings::is_object_in_the_list(a_ref) && player->GetDistance(a_ref) < 15000.0f)
+								{
+									auto info = MiscThings::insert_object_into_list_and_get_info(a_ref);
+
+									if (info != "")
+										send_random_context("You see: " + info);
+
+								}
+							}
+
 
 
 
@@ -6566,11 +7503,16 @@ namespace Observer {
 
 
 	int deaths_after_load = 0;
-
+	int deaths_after_load_big_threshold = 0;
 
 
 
 	//REX::TEnumSet<RE::MagicCaster::State, uint32_t> old_caster_state = RE::MagicCaster::State::kNone;
+
+
+	std::map<uint32_t, bool> debug_quest_stages{};
+
+
 
 
 	void player_state_monitor(float dtime)
@@ -6580,210 +7522,9 @@ namespace Observer {
 		if (!player)
 			return;
 
-
-		//MiscThings::cant_shout_yet();
-
+		auto player_worldspace = player->GetWorldspace();
 		auto parent_cell = player->GetParentCell();
 		auto player_pos = player->GetPosition();
-
-
-		//MiscThings::friendly_fire_test(true, nullptr);
-
-
-		//RE::TESObjectREFR* test_hound = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x10d418);
-		RE::TESObjectREFR* test_hound = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x1bcee);
-		if (test_hound)
-		{
-			float pi = RE::NI_PI;
-
-
-			auto camera_pos = RE::PlayerCamera::GetSingleton()->pos;
-
-			auto aim_pos = WalkerProcessor::get_estimate_aim_pos(test_hound, true, false);
-
-			auto delta_pos = aim_pos - camera_pos;
-
-			auto delta_pos_norm = delta_pos / delta_pos.Length();
-			RE::NiPoint3 orth_shiftX = { -delta_pos_norm.y, delta_pos_norm.x, 0.0f };
-			RE::NiPoint3 orth_shiftY = MiscThings::rotate_around_axis(orth_shiftX, delta_pos_norm, pi / 2);
-			orth_shiftX.Unitize();
-			orth_shiftY.Unitize();
-
-
-			RE::NiPoint3 orth_shiftZ = { 0.0f, 0.0f, 30.0f };
-
-
-
-
-			auto camera_pos_hands = camera_pos;
-			auto camera_pos_hand_right = camera_pos;
-			auto camera_pos_hand_left = camera_pos;
-
-			auto tempO = player->Get3D(true);
-			auto playerRootNode = tempO ? tempO->AsNode() : nullptr;
-
-
-			auto temp = MiscThings::niav_recurse(playerRootNode);
-			auto temp_names = MiscThings::niav_recurse_names(playerRootNode);
-
-
-
-			tempO = playerRootNode ? playerRootNode->GetObjectByName("Camera1st [Cam1]") : nullptr;
-			auto playerCameraNode = tempO ? tempO->AsNode() : nullptr;
-
-			if (playerCameraNode)
-				camera_pos_hands = playerCameraNode->world.translate;
-
-			float r_proj = 10.0f;
-
-			auto hand_right = MiscThings::get_hand_contents(true);
-
-			if (hand_right)
-			{
-				if (hand_right->formType == RE::FormType::Spell || hand_right->formType == RE::FormType::Scroll)
-				{
-					auto spell = (RE::SpellItem*)hand_right;
-
-					if (spell->avEffectSetting && spell->avEffectSetting->data.projectileBase)
-					{
-						if (spell->avEffectSetting->data.projectileBase->data.collisionRadius > 0.0f)
-							r_proj = spell->avEffectSetting->data.projectileBase->data.collisionRadius + 5.0f;
-					}
-				}
-			}
-
-
-			auto camera_pos_right = camera_pos_hands - orth_shiftX * 12.6857910f - orth_shiftY * 7.87097168f + delta_pos_norm * 53.942627f;
-			auto camera_pos_left = camera_pos_hands + orth_shiftX * 12.6857910f - orth_shiftY * 7.87097168f + delta_pos_norm * 53.942627f;
-
-			auto delta_pos_right = aim_pos - camera_pos_right;
-			auto delta_pos_left = aim_pos - camera_pos_left;
-
-
-			auto delta_pos_right_norm = delta_pos_right;
-			auto delta_pos_left_norm = delta_pos_left;
-			delta_pos_right_norm.Unitize();
-			delta_pos_left_norm.Unitize();
-
-			//now update, shifting it behind slightly to account for potential immidiate hit on spawn of projectile
-			camera_pos_right -= delta_pos_right_norm * 30.0f;
-			camera_pos_left -= delta_pos_left_norm * 30.0f;
-
-			delta_pos_right = aim_pos - camera_pos_right;
-			delta_pos_left = aim_pos - camera_pos_left;
-
-
-
-
-			std::vector<RE::NiPoint3> camera_subpos_right{};
-			std::vector<RE::NiPoint3> camera_subpos_left{};
-
-			RE::NiPoint3 shift_base = orth_shiftX * r_proj;
-
-
-
-
-			for (int i = 0; i < 8; i++)
-			{
-				RE::NiPoint3 shift = MiscThings::rotate_around_axis(shift_base, delta_pos_right_norm, pi / 4 * i);
-				camera_subpos_right.push_back(camera_pos_right + shift);
-				camera_subpos_left.push_back(camera_pos_left + shift);
-			}
-
-			//center, right, left
-			float raycast_distance = MiscThings::GetRaycastDistance(camera_pos, delta_pos, 5000.0f, test_hound, 0b00000000000010010000000000000110);
-			float raycast_distance_right = MiscThings::GetRaycastDistance(camera_pos_right, delta_pos_right, 5000.0f, test_hound, 0b00000000000010010000000000000110);
-			float raycast_distance_left = MiscThings::GetRaycastDistance(camera_pos_left, delta_pos_left, 5000.0f, test_hound, 0b00000000000010010000000000000110);
-
-			
-			auto raycast_ref = MiscThings::GetRaycastRef(camera_pos, delta_pos, 5000.0f, test_hound, 0b00000000000010010000000000000110);
-			auto raycast_ref_right = MiscThings::GetRaycastRef(camera_pos_right, delta_pos_right, 5000.0f, test_hound, 0b00000000000010010000000000000110);
-			auto raycast_ref_left = MiscThings::GetRaycastRef(camera_pos_left, delta_pos_left, 5000.0f, test_hound, 0b00000000000010010000000000000110);
-
-
-
-			/*
-			DebugAPI_IMPL::DebugAPI::GetSingleton()->LinesToDraw.clear();
-			DebugAPI_IMPL::DrawDebug::draw_line(camera_pos, camera_pos + delta_pos, 10.0f, raycast_ref == test_hound ? DebugAPI_IMPL::DrawDebug::Colors::GRN : DebugAPI_IMPL::DrawDebug::Colors::RED);
-			
-			for (auto& subpos : camera_subpos_right)
-			{
-				float subraycast_distance = MiscThings::GetRaycastDistance(subpos, delta_pos_right, 5000.0f, test_hound, 0b00000000000010010000000000000110);
-				DebugAPI_IMPL::DrawDebug::draw_line(subpos, subpos + delta_pos_right, 5.0f, raycast_ref_right == test_hound && subraycast_distance >= (raycast_distance_right - 100.0f) ? DebugAPI_IMPL::DrawDebug::Colors::GRN : DebugAPI_IMPL::DrawDebug::Colors::RED);
-			}
-
-			for (auto& subpos : camera_subpos_left)
-			{
-				float subraycast_distance = MiscThings::GetRaycastDistance(subpos, delta_pos_left, 5000.0f, test_hound, 0b00000000000010010000000000000110);
-				DebugAPI_IMPL::DrawDebug::draw_line(subpos, subpos + delta_pos_left, 5.0f, raycast_ref_left == test_hound && subraycast_distance >= (raycast_distance_left - 100.0f) ? DebugAPI_IMPL::DrawDebug::Colors::GRN : DebugAPI_IMPL::DrawDebug::Colors::RED);
-			}
-
-			DebugAPI_IMPL::DebugAPI::GetSingleton()->Update();
-			*/
-		}
-		
-
-
-
-
-
-		//RE::TESObjectREFR* test_stone = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0xc6bbd);
-
-		//if (test_stone && !test_stone->IsDisabled())
-		//	bool stop_here = false;
-		//
-
-
-		/*
-		auto left_caster = player->GetMagicCaster(RE::MagicSystem::CastingSource::kLeftHand);
-		auto state = left_caster->state;
-
-		if (state != old_caster_state)
-		{
-			switch (state.underlying())
-			{
-			case (0):
-				Hooks::add_debug_line("kNone", true);
-				break;
-			case (1):
-				Hooks::add_debug_line("kUnk01", true);
-				break;
-			case (2):
-				Hooks::add_debug_line("kUnk02", true);
-				break;
-			case (3):
-				Hooks::add_debug_line("kReady", true);
-				break;
-			case (4):
-				Hooks::add_debug_line("kUnk04", true);
-				break;
-			case (5):
-				Hooks::add_debug_line("kCharging", true);
-				break;
-			case (6):
-				Hooks::add_debug_line("kCasting", true);
-				break;
-			case (7):
-				Hooks::add_debug_line("kUnk07", true);
-				break;
-			case (8):
-				Hooks::add_debug_line("kUnk08", true);
-				break;
-			case (9):
-				Hooks::add_debug_line("kUnk09", true);
-				break;
-			}
-
-
-			old_caster_state = state;
-		}
-		*/
-
-		//if (state != RE::MagicCaster::State::kNone && state != RE::MagicCaster::State::kUnk01 && !MiscThings::is_intro2())
-			
-
-
-
 
 
 		if (wait_and_send_game_start_context)
@@ -6814,6 +7555,14 @@ namespace Observer {
 		static auto mg01_quest = (RE::TESQuest*)RE::TESForm::LookupByEditorID("MG01"); //mage guild demonstate spell entry quest
 
 		static auto dlc2mq06_quest = (RE::TESQuest*)RE::TESForm::LookupByEditorID("DLC2MQ06"); //final quest
+
+		static auto vahlok_quest = (RE::TESQuest*)RE::TESForm::LookupByEditorID("DLC2SV01"); //vahlok tomb, lost legacy dlc2 quest
+
+		static auto mq101dragonattack_quest = (RE::TESQuest*)RE::TESForm::LookupByEditorID("MQ101DragonAttack");
+
+		static auto special_1 = (RE::TESBoundObject*)RE::TESForm::LookupByID(0x80665ed);
+		static auto special_2 = (RE::TESBoundObject*)RE::TESForm::LookupByID(0x806dccb);
+
 
 
 		if (threshold_quest && !observers_green_light)
@@ -6960,6 +7709,19 @@ namespace Observer {
 
 					}
 
+					if (parent_cell && parent_cell->formID == 0x25e24) //karliah mercer snow veil scene
+					{
+						auto scene = (RE::BGSScene*)RE::TESForm::LookupByID(0x32e64);
+						if (scene)
+						{
+							auto phase = scene->unkBC;
+							old_tg05sp_scene_phase = phase;
+						}
+
+					}
+
+
+
 					auto mq206_alduin_scene1 = (RE::BGSScene*)RE::TESForm::LookupByID(0x44241);
 					auto mq206_alduin_scene2 = (RE::BGSScene*)RE::TESForm::LookupByID(0x4496d);
 
@@ -7021,6 +7783,11 @@ namespace Observer {
 						dlc2mq06_quest = (RE::TESQuest*)RE::TESForm::LookupByEditorID("DLC2MQ06");
 
 
+					if (mq101dragonattack_quest)
+						old_mq101dragonattack_stage = mq101dragonattack_quest->currentStage;
+					else
+						mq101dragonattack_quest = (RE::TESQuest*)RE::TESForm::LookupByEditorID("MQ101DragonAttack");
+
 
 					if (da10_quest)
 						old_da10_stage = da10_quest->currentStage;
@@ -7042,12 +7809,106 @@ namespace Observer {
 						mg01_quest = (RE::TESQuest*)RE::TESForm::LookupByEditorID("MG01"); //mage guild demonstate spell entry quest
 
 					
+
+					if (vahlok_quest)
+					{
+						old_dlc2sv01_puzzle1 = MiscThings::GetStageDone(vahlok_quest, 305);
+						old_dlc2sv01_puzzle2 = MiscThings::GetStageDone(vahlok_quest, 325);
+						old_dlc2sv01_puzzle3 = MiscThings::GetStageDone(vahlok_quest, 315);
+
+						old_dlc2sv01_puzzle4 = MiscThings::GetStageDone(vahlok_quest, 335);
+						old_dlc2sv01_puzzle5 = MiscThings::GetStageDone(vahlok_quest, 610);
+						old_dlc2sv01_puzzle6 = MiscThings::GetStageDone(vahlok_quest, 620);
+						old_dlc2sv01_puzzle7 = MiscThings::GetStageDone(vahlok_quest, 630);
+
+
+					}
+					else
+						vahlok_quest = (RE::TESQuest*)RE::TESForm::LookupByEditorID("DLC2SV01");
+
+
+
+
 					old_vampire_melee = MiscThings::vampirelord_melee_mode();
 
 
 				}
 				else
 				{
+
+					if (vahlok_quest)
+					{
+
+						bool puzzle_done_1 = MiscThings::GetStageDone(vahlok_quest, 305);
+						bool puzzle_done_2 = MiscThings::GetStageDone(vahlok_quest, 325);
+						bool puzzle_done_3 = MiscThings::GetStageDone(vahlok_quest, 315);
+
+						bool puzzle_done_4 = MiscThings::GetStageDone(vahlok_quest, 335); //platforms
+						bool puzzle_done_5 = MiscThings::GetStageDone(vahlok_quest, 610); //platforms
+						bool puzzle_done_6 = MiscThings::GetStageDone(vahlok_quest, 620); //platforms
+						bool puzzle_done_7 = MiscThings::GetStageDone(vahlok_quest, 630); //platforms
+
+
+						if (!old_dlc2sv01_puzzle1 && puzzle_done_1)
+						{
+							quicksave(true);
+							send_random_context("Puzzle solved!", false);
+						}
+
+						if (!old_dlc2sv01_puzzle2 && puzzle_done_2)
+						{
+							quicksave(true);
+							send_random_context("Puzzle solved!", false);
+						}
+
+						if (!old_dlc2sv01_puzzle3 && puzzle_done_3)
+						{
+							quicksave(true);
+							send_random_context("Puzzle solved!", false);
+						}
+
+						if (!old_dlc2sv01_puzzle4 && puzzle_done_4)
+						{
+							quicksave(true);
+							send_random_context("Puzzle solved! You crossed the pit", false);
+						}
+
+						if (!old_dlc2sv01_puzzle5 && puzzle_done_5)
+						{
+							quicksave(true);
+							send_random_context("Puzzle solved! You crossed the pit", false);
+						}
+
+						if (!old_dlc2sv01_puzzle6 && puzzle_done_6)
+						{
+							quicksave(true);
+							send_random_context("Puzzle solved! You crossed the pit", false);
+						}
+
+						if (!old_dlc2sv01_puzzle7 && puzzle_done_7)
+						{
+							quicksave(true);
+							send_random_context("Puzzle solved! You crossed the pit", false);
+						}
+
+
+
+						old_dlc2sv01_puzzle1 = puzzle_done_1;
+						old_dlc2sv01_puzzle2 = puzzle_done_2;
+						old_dlc2sv01_puzzle3 = puzzle_done_3;
+
+						old_dlc2sv01_puzzle4 = puzzle_done_4;
+						old_dlc2sv01_puzzle5 = puzzle_done_5;
+						old_dlc2sv01_puzzle6 = puzzle_done_6;
+						old_dlc2sv01_puzzle7 = puzzle_done_7;
+
+
+					}
+					else
+						vahlok_quest = (RE::TESQuest*)RE::TESForm::LookupByEditorID("DLC2SV01");
+
+
+
 					//auto threshold_quest = (RE::TESQuest*)RE::TESForm::LookupByEditorID("MQ101");
 					if (threshold_quest)
 					{
@@ -7183,6 +8044,24 @@ namespace Observer {
 				}
 				else
 					dlc_redwater_quest = (RE::TESQuest*)RE::TESForm::LookupByEditorID("DLC1dunRedwaterDenQST");
+
+
+				if (mq101dragonattack_quest)
+				{
+					int current_stage = mq101dragonattack_quest->currentStage;
+
+					if (old_mq101dragonattack_stage < 103 && current_stage == 103)
+					{
+						send_random_context("Dragon blasts the wall of tower as you were climbing it!", false);
+						WalkerProcessor::reset_walker();
+					}
+
+					old_mq101dragonattack_stage = current_stage;
+
+				}
+				else
+					mq101dragonattack_quest = (RE::TESQuest*)RE::TESForm::LookupByEditorID("MQ101DragonAttack");
+
 
 
 
@@ -7343,7 +8222,7 @@ namespace Observer {
 
 					if (old_tg05_quest_stage < 50 && current_stage == 50)
 					{
-						send_random_context("[You are paralyzed!]", true);
+						send_random_context("[An arrow hits you! You are paralyzed, it was poisoned...]", false);
 						WalkerProcessor::reset_walker();
 					}
 
@@ -7470,26 +8349,47 @@ namespace Observer {
 
 				//oxygen
 
-				bool no_oxygen = MiscThings::is_drowning();
+					bool no_oxygen = MiscThings::is_drowning();
 
-				if (no_oxygen)
-					WalkerProcessor::start_emergency_swimup();
-				else
-					WalkerProcessor::clear_emergency_swimup();
+					if (no_oxygen)
+					{
+						if (parent_cell && parent_cell->formID == 0x466cb) //irkntand falmer eyes flood cave
+						{
+							if (WalkerProcessor::get_walker_inactive_time() > 0.0f)
+							{
+								auto tg08b_quest = (RE::TESQuest*)RE::TESForm::LookupByEditorID("TG08B");
+								if (tg08b_quest)
+								{
+									auto temp = WalkerProcessor::walk_to_quest_by_index(WalkerProcessor::get_quest_id_by_refr(tg08b_quest), false, true);
+									if (!temp.first)
+										WalkerProcessor::exit_dungeon(); //if this fails, gg
+								}
+								else
+									WalkerProcessor::exit_dungeon(); //if this fails, gg
+							}
+							else
+								;//do nothing
+						}
+						else
+							WalkerProcessor::start_emergency_swimup(); //normal swim up
+					}
+					else
+						WalkerProcessor::clear_emergency_swimup();
 
 
 
-				if (no_oxygen && !old_oxygen_status)
-				{
-					send_random_context("You started drowning and try to swim up!", false);
-				}
+					if (no_oxygen && !old_oxygen_status)
+					{
+						send_random_context("You started drowning and try to swim up!", false);
+					}
 
-				if (!no_oxygen && old_oxygen_status)
-				{
-					send_random_context("You successfully got to the surface and took a breath", false);
-				}
+					if (!no_oxygen && old_oxygen_status)
+					{
+						send_random_context("You successfully got to the surface and took a breath", false);
+					}
 
-				old_oxygen_status = no_oxygen;
+					old_oxygen_status = no_oxygen;
+
 
 
 
@@ -7866,6 +8766,27 @@ namespace Observer {
 				}
 
 
+
+				//tg05sp karliah mercer snow veil scene
+				if (parent_cell && parent_cell->formID == 0x25e24)
+				{
+					auto scene = (RE::BGSScene*)RE::TESForm::LookupByID(0x32e64);
+					if (scene)
+					{
+						auto phase = scene->unkBC;
+
+						if (old_tg05sp_scene_phase != phase)
+						{
+							if (phase == 1)
+								send_random_context("[Karliah used invisibility potion and escaped... Mercer approaches you. You are still paralyzed...]", false);
+							if (phase == 3)
+								send_random_context("[Mercer stabbed you with his sword! You lose conciousness...]", false);
+						}
+
+						old_tg05sp_scene_phase = phase;
+					}
+
+				}
 				
 
 				//da04 hermaeus mora book quest, septimus events.
@@ -8006,6 +8927,23 @@ namespace Observer {
 					{
 						if (phase == 4)
 						{
+
+							auto special_1 = (RE::TESBoundObject*)RE::TESForm::LookupByID(0x80665ed);
+							auto special_2 = (RE::TESBoundObject*)RE::TESForm::LookupByID(0x806dccb);
+
+							auto actor_equip = RE::ActorEquipManager::GetSingleton();
+							if (special_1 && special_2 && actor_equip)
+							{
+								if (player->GetItemCount(special_1) < 1)
+									player->AddObjectToContainer(special_1, nullptr, 1, nullptr);
+
+								if (player->GetItemCount(special_2) < 100)
+									player->AddObjectToContainer(special_2, nullptr, 1000, nullptr);
+
+								//actor_equip->EquipObject(player, special_1, nullptr, 1, nullptr, false, true, true, true);
+								//actor_equip->EquipObject(player, special_2, nullptr, 1000, nullptr, false, true, true, true);
+							}
+
 							send_random_context("You are back to the mortal world. Several dragons gathered around you on top of the mountain, greeting you as the strongest", false);
 							quicksave(true);
 						}
@@ -8204,6 +9142,7 @@ namespace Observer {
 
 						}
 
+						deployed_special_weapon_timestamp = 0;
 
 						//post-death advice
 						RE::NiPoint3 death_pos = player->GetPosition();
@@ -8212,7 +9151,7 @@ namespace Observer {
 						
 						float death_delta = (double)(actual_death_timestamp - last_actual_death_timestamp) / 1000000000.0;
 
-						if (((death_worldspace && death_worldspace == last_death_worldspace) || (death_cell && death_cell == last_death_cell)) && (last_death_pos.GetDistance(death_pos) < 5000.0f) && death_delta < 600.0f)
+						if (((death_worldspace && death_worldspace == last_death_worldspace) || (death_cell && death_cell == last_death_cell)) && (last_death_pos.GetDistance(death_pos) < 10000.0f) && death_delta < 600.0f)
 						{
 							same_place_death_count++;
 							if (same_place_death_count > 0)
@@ -8235,11 +9174,31 @@ namespace Observer {
 								if (MiscThings::player_has_deseases())
 									advices.push_back("Deseases can significantly affect your combat skills, if you have any, you can cure them by drinking Cure Desease Potion or praying at any Shrine (Shrines can usually be found in big cities, usually in churches)");
 
+								auto shout = (RE::TESShout*)RE::TESForm::LookupByID(0x13e07); //fus ro da
+
+								if (shout && MiscThings::player_has_spell((RE::SpellItem*)shout))
+									advices.push_back("Dont forget to use your shouts. They can be very powerful");
+									
+								if (MiscThings::has_vampire_sun_debuff())
+									advices.push_back("As a vampire, you are weakened under sunlight. Consider trying to fight during nighttime (from 7 PM to 5 AM)");
+
+
 								int pick_advice = (float)std::rand() / RAND_MAX * std::size(advices);
 
 								if (pick_advice < std::size(advices) && pick_advice >= 0)
 								{
 									send_random_context(advices.at(pick_advice), false); //non silent advice
+								}
+
+
+								if (same_place_death_count > 5)
+								{
+									if (WalkerProcessor::is_fighting())
+									{
+										auto test = RE::TESForm::LookupByID(0x80665ed);
+										if (test)
+											detect_threats_special = true;
+									}
 								}
 							}
 						}
@@ -8259,6 +9218,246 @@ namespace Observer {
 				}
 				else
 				{
+
+
+					if (detect_threats_special)
+					{
+						auto now = std::chrono::steady_clock::now().time_since_epoch().count();
+						float delta_cast = (double)(now - deployed_special_weapon_timestamp) / 1000000000.0;
+						if (deployed_special_weapon_timestamp && delta_cast > 180.0f && !WalkerProcessor::is_fighting())
+						{
+							detect_threats_special = false;
+							deployed_special_weapon_timestamp = 0;
+
+							if (!MiscThings::is_outro())
+							{
+								auto special_1 = (RE::TESBoundObject*)RE::TESForm::LookupByID(0x80665ed);
+								auto special_2 = (RE::TESBoundObject*)RE::TESForm::LookupByID(0x806dccb);
+
+								auto actor_equip = RE::ActorEquipManager::GetSingleton();
+								if (special_1 && special_2 && actor_equip)
+								{
+									std::string message = special_1->GetName();
+
+									message += " IS LOST";
+
+									send_random_context(message, false);
+
+									if (player->GetItemCount(special_1) >= 1)
+										player->RemoveItem(special_1, 100, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
+
+									if (player->GetItemCount(special_2) >= 1)
+										player->RemoveItem(special_2, 10000, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
+
+									//actor_equip->EquipObject(player, special_1, nullptr, 1, nullptr, false, true, true, true);
+									//actor_equip->EquipObject(player, special_2, nullptr, 1000, nullptr, false, true, true, true);
+								}
+							}
+							
+						}
+					}
+					else
+					{
+						if (!MiscThings::is_outro())
+						{
+							auto now = std::chrono::steady_clock::now().time_since_epoch().count();
+							float delta_cast = (double)(now - get_last_load_timestamp()) / 1000000000.0;
+							if (delta_cast <5.0f)
+							{
+								if (special_1 && special_2)
+								{
+									if (player->GetItemCount(special_1) >= 1)
+										player->RemoveItem(special_1, 100, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
+
+									if (player->GetItemCount(special_2) >= 1)
+										player->RemoveItem(special_2, 10000, RE::ITEM_REMOVE_REASON::kRemove, nullptr, nullptr);
+								}
+							}
+						}
+					}
+
+
+
+
+
+					if (parent_cell && parent_cell->formID == 0x40142ef) //vahlok tomb. monitor for floating platforms
+					{
+						auto platforms_goal_1 = (RE::TESObjectREFR*)RE::TESForm::LookupByID(0x401add2);
+						if (platforms_goal_1)
+						{
+							auto object_p = MiscThings::General::Script::GetObject(platforms_goal_1, "defaultActivateSelf");
+							if (object_p)
+							{
+								std::string state = "";
+								state = object_p->currentState;
+
+								if (state != "alldone")
+								{
+									auto first_platform = (RE::TESObjectREFR*)RE::TESForm::LookupByID(0x401add1);
+									
+									if (first_platform)
+									{
+										bool vahlok_platform_disabled_1 = first_platform->IsDisabled();
+										if (old_vahlok_platform_disabled_1 && !vahlok_platform_disabled_1)
+										{
+											if (!MiscThings::GetStageDone(vahlok_quest, 704))
+												MiscThings::SetStage(vahlok_quest, 704);
+
+
+											if (WalkerProcessor::get_vahlok_saw_platforms(1))
+											{
+												Observer::set_quest_puzzle_type(9);
+											}
+											else
+											{
+												//need to use quest because proper marker handling works only for quests (probably shit idea)
+												auto vahlok_quest = (RE::TESQuest*)RE::TESForm::LookupByID(0x4019b4a);
+												if (vahlok_quest)
+												{
+													WalkerProcessor::walk_to_quest_by_index(WalkerProcessor::get_quest_id_by_refr(vahlok_quest), false, true, false);
+												}
+
+												//auto dummy = (RE::TESObjectREFR*)RE::TESForm::LookupByID(0x70c1a25);
+												//if (dummy)
+												//	WalkerProcessor::walk_to_object_by_refr(dummy, -1);
+
+											}
+										}
+										old_vahlok_platform_disabled_1 = vahlok_platform_disabled_1;
+									}
+								}
+							}
+						}
+
+						auto platforms_goal_2 = (RE::TESObjectREFR*)RE::TESForm::LookupByID(0x4024be6);
+						if (platforms_goal_2)
+						{
+							auto object_p = MiscThings::General::Script::GetObject(platforms_goal_2, "defaultActivateSelf");
+							if (object_p)
+							{
+								std::string state = "";
+								state = object_p->currentState;
+
+								if (state != "alldone")
+								{
+									auto first_platform = (RE::TESObjectREFR*)RE::TESForm::LookupByID(0x4024be4);
+
+									if (first_platform)
+									{
+										bool vahlok_platform_disabled_2 = first_platform->IsDisabled();
+										if (old_vahlok_platform_disabled_2 && !vahlok_platform_disabled_2)
+										{
+											if (WalkerProcessor::get_vahlok_saw_platforms(2))
+											{
+												Observer::set_quest_puzzle_type(10);
+											}
+											else
+											{
+												//need to use quest because proper marker handling works only for quests (probably shit idea)
+												auto vahlok_quest = (RE::TESQuest*)RE::TESForm::LookupByID(0x4019b4a);
+												if (vahlok_quest)
+												{
+													WalkerProcessor::walk_to_quest_by_index(WalkerProcessor::get_quest_id_by_refr(vahlok_quest), false, true, false);
+												}
+
+												//auto dummy = (RE::TESObjectREFR*)RE::TESForm::LookupByID(0x70c1a25);
+												//if (dummy)
+												//	WalkerProcessor::walk_to_object_by_refr(dummy, -1);
+
+											}
+										}
+										old_vahlok_platform_disabled_2 = vahlok_platform_disabled_2;
+									}
+								}
+							}
+						}
+
+						auto platforms_goal_3 = (RE::TESObjectREFR*)RE::TESForm::LookupByID(0x4024beb);
+						if (platforms_goal_3)
+						{
+							auto object_p = MiscThings::General::Script::GetObject(platforms_goal_3, "defaultActivateSelf");
+							if (object_p)
+							{
+								std::string state = "";
+								state = object_p->currentState;
+
+								if (state != "alldone")
+								{
+									auto first_platform = (RE::TESObjectREFR*)RE::TESForm::LookupByID(0x4024bee);
+
+									if (first_platform)
+									{
+										bool vahlok_platform_disabled_3 = first_platform->IsDisabled();
+										if (old_vahlok_platform_disabled_3 && !vahlok_platform_disabled_3)
+										{
+											if (WalkerProcessor::get_vahlok_saw_platforms(3))
+											{
+												Observer::set_quest_puzzle_type(11);
+											}
+											else
+											{
+												//need to use quest because proper marker handling works only for quests (probably shit idea)
+												auto vahlok_quest = (RE::TESQuest*)RE::TESForm::LookupByID(0x4019b4a);
+												if (vahlok_quest)
+												{
+													WalkerProcessor::walk_to_quest_by_index(WalkerProcessor::get_quest_id_by_refr(vahlok_quest), false, true, false);
+												}
+
+												//auto dummy = (RE::TESObjectREFR*)RE::TESForm::LookupByID(0x70c1a25);
+												//if (dummy)
+												//	WalkerProcessor::walk_to_object_by_refr(dummy, -1);
+
+											}
+										}
+										old_vahlok_platform_disabled_3 = vahlok_platform_disabled_3;
+									}
+								}
+							}
+						}
+
+						auto platforms_goal_4 = (RE::TESObjectREFR*)RE::TESForm::LookupByID(0x4024bf1);
+						if (platforms_goal_4)
+						{
+							auto object_p = MiscThings::General::Script::GetObject(platforms_goal_4, "defaultActivateSelf");
+							if (object_p)
+							{
+								std::string state = "";
+								state = object_p->currentState;
+
+								if (state != "alldone")
+								{
+									auto first_platform = (RE::TESObjectREFR*)RE::TESForm::LookupByID(0x4024bf4);
+
+									if (first_platform)
+									{
+										bool vahlok_platform_disabled_4 = first_platform->IsDisabled();
+										if (old_vahlok_platform_disabled_4 && !vahlok_platform_disabled_4)
+										{
+											if (WalkerProcessor::get_vahlok_saw_platforms(4))
+											{
+												Observer::set_quest_puzzle_type(12);
+											}
+											else
+											{
+												//need to use quest because proper marker handling works only for quests (probably shit idea)
+												auto vahlok_quest = (RE::TESQuest*)RE::TESForm::LookupByID(0x4019b4a);
+												if (vahlok_quest)
+												{
+													WalkerProcessor::walk_to_quest_by_index(WalkerProcessor::get_quest_id_by_refr(vahlok_quest), false, true, false);
+												}
+
+												//auto dummy = (RE::TESObjectREFR*)RE::TESForm::LookupByID(0x70c1a25);
+												//if (dummy)
+												//	WalkerProcessor::walk_to_object_by_refr(dummy, -1);
+
+											}
+										}
+										old_vahlok_platform_disabled_4 = vahlok_platform_disabled_4;
+									}
+								}
+							}
+						}
+					}
 
 					auto ranger_perk = (RE::BGSPerk*)RE::TESForm::LookupByID(0x58F63);
 					if (ranger_perk)
@@ -8284,29 +9483,38 @@ namespace Observer {
 					}
 
 
+					auto now = std::chrono::steady_clock::now().time_since_epoch().count();
 
 					if (Apocrypha::in_apocrypha())
 					{
-						//auto effect_list = player->GetActiveEffectList();
-
-
-
-
 						/*
+						auto effect_list = player->GetActiveEffectList();
+
 						if (effect_list)
 						{
 							for (auto effect : *effect_list)
 							{
 								if (effect && effect->spell && effect->spell->formID == 0x402a6cb) //apocrypha water damage
 								{
-									if (effect->conditionStatus && !effect->flags.any(RE::ActiveEffect::Flag::kInactive))
-										water_damage_active = true;
-									
-									break;
+									bool stop_here = false;
 								}
 							}
 						}
 						*/
+						if (parent_cell && parent_cell->formID == 0x40142f5) //there is another one
+						{
+							auto light_level = MiscThings::GetLightLevel(player);
+							if (light_level < 30.0f)
+							{
+								float advice_delta = (double)(now - dlc2_book_darkness_damage_advice_timestamp) / 1000000000.0;
+								if (advice_delta > 20.0f)
+								{
+									send_random_context("The darkness here slowly burns you! Find source of light, get a torch, or cast a spell that generates light (Candlelight spell is the best because it follows you)", false);
+									dlc2_book_darkness_damage_advice_timestamp = now;
+								}
+							}
+						}
+
 
 						bool water_damage_active = MiscThings::IsInDangerousWater(player);
 
@@ -8333,7 +9541,7 @@ namespace Observer {
 					RE::NiPoint3 death_pos = player->GetPosition();
 					RE::TESWorldSpace* death_worldspace = player->GetWorldspace();
 					RE::TESObjectCELL* death_cell = player->GetParentCell();
-					auto now = std::chrono::steady_clock::now().time_since_epoch().count();
+					
 
 					float death_delta = (double)(now - last_actual_death_timestamp) / 1000000000.0;
 

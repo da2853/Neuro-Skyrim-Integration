@@ -8,8 +8,8 @@
 //////////////////////////////////////////////////////
 // QUESTLINES
 
-//TODO polish thief guild (potential softlock due to anti-drown in mercer fight, no info in the well of nocturnal sanctum, maybe fix goldenglow pathfinding)
-//TODO polish dark brotherhood (test alternative paths (kill astrid right away, dont kill captain when caught killing fake emperor, accept emperors offer to kill the client), orc drag mechanic
+//TODO polish thief guild (no info in the well of nocturnal sanctum, maybe fix goldenglow pathfinding)
+//TODO polish dark brotherhood (test alternative paths (kill astrid right away, dont kill captain when caught killing fake emperor)
 //TODO polish civil war (ambush quest sometimes the soldier cannot hit the enemy)
 //TODO polish companions (maybe add jorwaskr as an interesting place to whiterun; test more locations for silverhands)
 
@@ -44,13 +44,10 @@
 
 
 //TODO other quests
-//TODO mzulft red nirnroot potentially unreachable because cave entrance only works for mainquestline
 
 //TODO hearthfire dlc
 
 //TODO that seducers AE quest
-
-//TODO fishing quests?
 
 //  RANDOM QUESTS TODO
 
@@ -68,17 +65,18 @@
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////DO ALL THIS
 
+//finish unearthed quest
+//add support for all houses + archmage room should have accessible chest and bed
+//maybe test the rest of mainquest just in case
+
+
+//COMBAT
 //in keep-distance mode dont rush towards enemy right away if we have ranged weapon, wait a little, maybe they will come closer themselves
-//choice to quit barter for each confirmation force
-//when surrounded by enemies/cornered - switch to attacking nearest. when blocked by enemy - redirect to it
 //autoswitch from ritual level scrolls after use (HOW?)
-//test a fight versus dragon in beast form
+//run away/tactical retreat - check possibility of replacing "runaway target" with some distant point on loaded navmesh, depending on direction of enemy
 
 
-//test solstheim more
 //more solstheim quests. pirate quest. check what other quests are there. dwemer bow dungeon quest
-//make so combat sucks less (random pauses/shooting walls/etc)
-//calibrate water-outofwater walking. causes big problems when there is small staircase out of water
 
 //werewolf still freezes sometimes
 
@@ -108,7 +106,6 @@
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 
 
 
@@ -146,6 +143,8 @@
 //TODO QUESTIONABLE unique ID's for everything. after item picked up, try to keep ID the same in the inventory
 //TODO hand equip info (both spells and inventory. spells in the inventory will require insert_spell_into_list_and_get_info function)
 //TODO coop
+
+//BLUNDERBUSS????
 
 
 //#include <string>
@@ -570,7 +569,7 @@ bool force_choice(std::vector<MenuOption> options, std::string message, int forc
         if (force_type == force_type::character_name)
             force_action = Capabilities::SelectForceChoiceString::Action;
 
-        if (force_type == force_type::container_item_array || force_type == force_type::barter_item_array || force_type == force_type::change_character)
+        if (force_type == force_type::container_item_array || force_type == force_type::barter_item_array || force_type == force_type::change_character || force_type == force_type::timed_quest_puzzle_array)
             force_action = Capabilities::SelectForceChoiceArray::Action;
 
 
@@ -1112,10 +1111,12 @@ void send_random_context(std::string context, bool silent)
 
     if (context.find(" resisted ") != std::string::npos)
     {
-        if ((WalkerProcessor::is_fighting() && MiscThings::is_offensive_spell(WalkerProcessor::get_current_active_hand())) || is_casting_cast())
+        if ((WalkerProcessor::is_fighting()) || is_casting_cast())
         {
             auto now = std::chrono::steady_clock::now().time_since_epoch().count();
             float delta_resist_info = (double)(now - last_time_resist_info) / 1000000000.0;
+            
+            silent = true;
 
             if (delta_resist_info > 10.0f)
                 last_time_resist_info = now; //and fall down sending it
@@ -1732,6 +1733,8 @@ namespace Hooks {
 
                 if (player)
                 {
+                    MiscThings::update_player_collision_groups();
+
                     auto cell = player->GetParentCell();
 
 
@@ -1838,6 +1841,10 @@ namespace Hooks {
                             if (better_gear != "" && MiscThings::coinflip() && MiscThings::coinflip())
                                 advice += ". You have good gear that is not equipped, you can do use_inventory_items action to equip them: " + better_gear;
 
+                        
+                        if (player->IsTrespassing())
+                            advice += ". You are trespassing, if someone sees you - they might not like that. ";
+
 
                         if (MiscThings::player_has_shouts_to_unlock())
                         {
@@ -1860,6 +1867,9 @@ namespace Hooks {
 
                         if (parent_cell)
                         {
+                            if (parent_cell->formID != 0x40142ee)
+                                Observer::set_dlc2_ahzidal_ring2_disagreed_to_solve_puzzle(false); //reset this so asked again when dungeon is entered once more
+
                             switch (parent_cell->formID)
                             {
                             case (0x40142f1):
@@ -1870,6 +1880,67 @@ namespace Hooks {
                             case (0x401c155): //apocrypha book1 zone (7?)
                             {
                                 WalkerProcessor::reset_walker(); //nchardak. redirects break because there are too many of them and they must trigger right away (pedestals give weird info)
+                                break;
+                            }
+
+                            case (0x40142ee): //dlc2 kolbjorn unearthed quest. custom navcuts
+                            {
+                                auto unearthed_quest = (RE::TESQuest*)RE::TESQuest::LookupByID(0x401810b);//DLC2dunKolbjornQST
+                                if (unearthed_quest)
+                                {
+                                    auto navcut1 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x71a066b);
+                                    auto navcut2 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x71a576d);
+
+                                    if (navcut1)
+                                    {
+                                        if (unearthed_quest->currentStage > 150 && unearthed_quest->currentStage <= 250)
+                                        {
+                                            //must be enabled
+                                            if (navcut1->IsDisabled())
+                                                navcut1->Enable(false);
+                                        }
+                                        else
+                                        {
+                                            //must be disabled
+                                            if (!navcut1->IsDisabled())
+                                                navcut1->Disable();
+                                        }
+                                    }
+
+                                    if (navcut2)
+                                    {
+                                        if (unearthed_quest->currentStage > 250 && unearthed_quest->currentStage <= 350)
+                                        {
+                                            //must be enabled
+                                            if (navcut2->IsDisabled())
+                                                navcut2->Enable(false);
+                                        }
+                                        else
+                                        {
+                                            //must be disabled
+                                            if (!navcut2->IsDisabled())
+                                                navcut2->Disable();
+                                        }
+                                    }
+
+                                }
+                                break;
+                            }
+
+                            case (0x193ee): //dawnstar dark brotherhood base, backup navcut removal if story is ended
+                            {
+                                auto db10_quest = (RE::TESQuest*)RE::TESForm::LookupByEditorID("DB11");
+                                if (db10_quest && db10_quest->currentStage >= 20)
+                                {
+                                    auto navcut1 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x702f7ec);
+                                    auto navcut2 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x702f7ed);
+
+                                    if (navcut1 && !navcut1->IsDisabled())
+                                        navcut1->Disable();
+
+                                    if (navcut2 && !navcut2->IsDisabled())
+                                        navcut2->Disable();
+                                }
                                 break;
                             }
 
@@ -2808,6 +2879,7 @@ private:
 
                 MiscThings::notifications(dtime);
                 MiscThings::settlement_places_processor(dtime);
+                MiscThings::fishing_processor(dtime);
 
                 SleepWaitProcessor::processor(dtime);
                 BookProcessor::processor(dtime);
@@ -3853,6 +3925,46 @@ class MyHook {
                     //RE::ConsoleLog::GetSingleton()->Print(subtitle_msg.c_str());
                     if (sub_manager->currentSpeaker.get())
                     {
+
+
+                        auto parent_cell = player->GetParentCell();
+
+                        if (parent_cell && parent_cell->formID == 0x40142ef) //vahloks tomb, force quest stages
+                        {
+                            auto vahlok_quest = (RE::TESQuest*)RE::TESForm::LookupByEditorID("DLC2SV01");
+
+                            if (vahlok_quest)
+                            {
+                                if (subtitle_msg.find("A sacrifice will bring you closer to that which you seek") != std::string::npos)
+                                {
+                                    if (!MiscThings::GetStageDone(vahlok_quest, 701))
+                                        MiscThings::SetStage(vahlok_quest, 701);
+                                }
+                                
+                                if (subtitle_msg.find("All men must die, often by their own means") != std::string::npos)
+                                {
+                                    if (!MiscThings::GetStageDone(vahlok_quest, 702))
+                                        MiscThings::SetStage(vahlok_quest, 702);
+                                }
+
+                                if (subtitle_msg.find("Continue along the path, don't tread where you've been") != std::string::npos)
+                                {
+                                    if (!MiscThings::GetStageDone(vahlok_quest, 703))
+                                        MiscThings::SetStage(vahlok_quest, 703);
+                                }
+
+                                if (subtitle_msg.find("Stay your course. To idle is to die") != std::string::npos)
+                                {
+                                    if (!MiscThings::GetStageDone(vahlok_quest, 704))
+                                        MiscThings::SetStage(vahlok_quest, 704);
+                                }
+
+
+                            }
+
+                        }
+
+
                         auto speaker = sub_manager->currentSpeaker.get().get();
 
                         auto delphine = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x13485);

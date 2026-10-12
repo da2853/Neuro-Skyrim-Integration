@@ -9,6 +9,8 @@ namespace Observer {
 
 	//void install_observer_hooks();
 
+	bool is_puzzle_scanner_paused();
+	void set_puzzle_target(RE::TESObjectREFR* target);
 
 	void add_quicksave_timer(float time_to_add);
 
@@ -41,8 +43,14 @@ namespace Observer {
 	void timed_quest_puzzles_processor(float dtime);
 	void reset_quest_puzzles();
 	void set_quest_puzzle_type(int type);
+	
+	long long get_deployed_special_weapon_timestamp();
 
 	std::pair<bool, std::string> set_quest_puzzle_choice(int id);
+	std::pair<bool, std::string> set_quest_puzzle_choice_array(std::vector<int> choices);
+
+	void set_dlc2_ahzidal_ring2_disagreed_to_solve_puzzle(bool set);
+	bool get_dlc2_ahzidal_ring2_disagreed_to_solve_puzzle();
 
 	void cleanup_invalid_objects(float dtime, bool force = false);
 

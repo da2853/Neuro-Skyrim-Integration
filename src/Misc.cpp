@@ -92,6 +92,101 @@ namespace MiscThings {
     }
     */
 
+    /* //doesnt work?
+    bool SetStage(RE::TESQuest* quest, uint16_t stage)
+    {
+        if (!quest) return 0;                               //24482 //22151
+        REL::Relocation<decltype(SetStage)> func(REL::ID(24482));
+        return func(quest, stage);
+        //return originalSetStage(quest, stage);
+
+    }
+    */
+
+
+
+    bool SetStage(RE::TESQuest* quest, uint16_t stage)
+    {
+        if (!quest) return 0;                               //24482 //22151
+        REL::Relocation<decltype(SetStage)> func(REL::ID(25004));
+        return func(quest, stage);
+        //return originalSetStage(quest, stage);
+
+    }
+
+
+
+
+    std::string get_special_weapon_name()
+    {
+        auto special_1 = (RE::TESBoundObject*)RE::TESForm::LookupByID(0x80665ed);
+        if (special_1)
+            return special_1->GetName();
+
+        return "";
+    }
+
+    /*
+    void SetStage(std::string quest_name, int stage)
+    {
+
+        static RE::SCRIPT_FUNCTION* function = RE::SCRIPT_FUNCTION::GetFirstScriptCommand() + std::to_underlying(RE::FUNCTION_DATA::FunctionID::kSetStage);
+
+        if (function)
+        {
+            RE::SCRIPT_PARAMETER params{};
+            params.paramName = quest_name.c_str();
+            params.paramType = RE::SCRIPT_PARAM_TYPE::kQuest;
+
+            double out = 0.0f;
+            double result = 0.0f;
+            uint32_t opcode_offset = 0;
+
+            function->executeFunction(&params, nullptr, nullptr, nullptr, nullptr, nullptr, result, opcode_offset);
+
+            //function->conditionFunction(nullptr, quest, (void*)stage, out);
+        }
+    }
+    */
+
+    bool GetStageDone(RE::TESQuest* quest, int stage)
+    {
+        bool result = false;
+
+        if (quest && quest->formType == RE::FormType::Quest)
+        {
+
+            static RE::SCRIPT_FUNCTION* function = RE::SCRIPT_FUNCTION::GetFirstScriptCommand() + std::to_underlying(RE::FUNCTION_DATA::FunctionID::kGetStageDone);
+
+            double out = 0.0;
+
+            if (function)
+            {
+                function->conditionFunction(nullptr, quest, (void*)stage, out);
+            }
+
+            return out;
+
+
+
+            /*
+            RE::TESConditionItem condition_item{};
+            auto params = RE::ConditionCheckParams::ConditionCheckParams(nullptr, nullptr);
+            params.quest = quest;
+            condition_item.data.functionData.function = RE::FUNCTION_DATA::FunctionID::kGetStageDone;
+            condition_item.data.functionData.params[0] = quest;
+            condition_item.data.functionData.params[1] = (void*)stage;
+            condition_item.data.comparisonValue.f = 1.0;
+            condition_item.data.comparisonValue.g = nullptr;
+            condition_item.data.flags.opCode = RE::CONDITION_ITEM_DATA::OpCode::kEqualTo;
+            result = !condition_item.IsTrue(params);
+            */
+        }
+
+        return result;
+    }
+
+
 
 
     RE::TESObjectREFR* get_furniture_occupant(RE::TESObjectREFR* furniture_refr)
@@ -124,7 +219,57 @@ namespace MiscThings {
         return result;
     }
 
+    /* //this doesnt work, data[0] is always devouring. need to somehow get active animation
+    std::string killcam_action_name()
+    {
 
+        auto player = RE::PlayerCharacter::GetSingleton();
+        RE::BSAnimationGraphManagerPtr my_ptr;
+        auto anim_graph_manager = player->GetAnimationGraphManager(my_ptr);
+
+        if (my_ptr)
+        {
+            if (my_ptr->activeGraph < my_ptr->graphs.size())
+            {
+                auto test_graph = my_ptr->graphs[my_ptr->activeGraph];
+
+
+                if (test_graph)
+                {
+                    if (test_graph->characterInstance.setup && test_graph->characterInstance.setup->data && test_graph->characterInstance.setup->data->stringData && test_graph->characterInstance.setup->data->stringData->animationNames._data->size() > 0)
+                    {
+                        std::string anim_name = test_graph->characterInstance.setup->data->stringData->animationNames._data[0].c_str();
+
+                        if (anim_name.find("paired_ww_pairedfeedingwithhuman") != std::string::npos)
+                        {
+                            return "are devouring your enemy";
+                        }
+
+                        if (anim_name.find("paired_ww_pairedmaulingwithhuman") != std::string::npos)
+                        {
+                            return "are mauling your enemy";
+                        }
+
+
+                        if (anim_name.find("paired_ww_pairedheadthrow") != std::string::npos)
+                        {
+                            return "grabbed by the head and tossed your enemy";
+                        }
+                            
+                        if (anim_name.find("paired_ww_pairedheadsmash") != std::string::npos)
+                        {
+                            return "grabbed your enemy by the head and smashed it";
+                        }
+
+
+                    }
+                }
+            }
+        }
+
+        return "";
+    }
+    */
 
     bool killcam_active()
     {
@@ -340,6 +485,20 @@ namespace MiscThings {
         return false;
     }
 
+
+    bool is_actor_staggering(RE::TESObjectREFR* object)
+    {
+        if (object && object->IsActor())
+        {
+            auto actor = (RE::Actor*)object;
+
+            return actor->IsStaggered() || actor->IsStaggering();
+        }
+
+        return false;
+    }
+
+
     bool cant_shout_yet()
     {
         auto player = RE::PlayerCharacter::GetSingleton();
@@ -518,6 +677,8 @@ namespace MiscThings {
             case (0x956B5):
             case (0x400cfb6):
             case (0x401aea4):
+            case (0x35369):
+            case (0x401a578):
                     return true;
             }
 
@@ -528,6 +689,22 @@ namespace MiscThings {
     }
 
 
+
+
+    bool deployed_special_weapon_recently()
+    {
+        auto hand_contents = MiscThings::get_hand_contents(true);
+
+        if (!(hand_contents && hand_contents->formID == 0x80665ed))
+            return false;
+
+        auto now = std::chrono::steady_clock::now().time_since_epoch().count();
+        float delta_cast = (double)(now - Observer::get_deployed_special_weapon_timestamp()) / 1000000000.0;
+        if (delta_cast < 60.0f)
+            return true;
+
+        return false;
+    }
 
 
     bool cast_spell_recently()
@@ -963,7 +1140,7 @@ namespace MiscThings {
                                         hand_pos -= camera_orth_dir1 * 5.0f;
 
 
-                                    auto raycast_ref = MiscThings::GetRaycastRef(camera_pos, camera_dir, range2, nullptr, 0b00000000000010010000000000000110);
+                                    auto raycast_ref = MiscThings::GetRaycastRef(camera_pos, camera_dir, range2, nullptr, MiscThings::get_player_projectile_filter());
 
 
                                     float pi = RE::NI_PI;
@@ -1054,25 +1231,26 @@ namespace MiscThings {
                                         if (player_target_distance < range2)
                                             range2 = player_target_distance;
 
+                                        auto filter = MiscThings::get_player_projectile_filter();
 
-                                        auto raycast_ref2 = MiscThings::GetRaycastRef(pos1, camera_dir_tilted1, range2, nullptr, 0b00000000000010010000000000000110);
-                                        auto raycast_ref3 = MiscThings::GetRaycastRef(pos2, camera_dir_tilted2, range2, nullptr, 0b00000000000010010000000000000110);
-                                        auto raycast_ref4 = MiscThings::GetRaycastRef(pos3, camera_dir_tilted3, range2, nullptr, 0b00000000000010010000000000000110);
-                                        auto raycast_ref5 = MiscThings::GetRaycastRef(pos4, camera_dir_tilted4, range2, nullptr, 0b00000000000010010000000000000110);
-                                        auto raycast_ref6 = MiscThings::GetRaycastRef(pos5, camera_dir_tilted5, range2, nullptr, 0b00000000000010010000000000000110);
-                                        auto raycast_ref7 = MiscThings::GetRaycastRef(pos6, camera_dir_tilted6, range2, nullptr, 0b00000000000010010000000000000110);
-                                        auto raycast_ref8 = MiscThings::GetRaycastRef(pos7, camera_dir_tilted7, range2, nullptr, 0b00000000000010010000000000000110);
-                                        auto raycast_ref9 = MiscThings::GetRaycastRef(pos8, camera_dir_tilted8, range2, nullptr, 0b00000000000010010000000000000110);
+                                        auto raycast_ref2 = MiscThings::GetRaycastRef(pos1, camera_dir_tilted1, range2, nullptr, filter);
+                                        auto raycast_ref3 = MiscThings::GetRaycastRef(pos2, camera_dir_tilted2, range2, nullptr, filter);
+                                        auto raycast_ref4 = MiscThings::GetRaycastRef(pos3, camera_dir_tilted3, range2, nullptr, filter);
+                                        auto raycast_ref5 = MiscThings::GetRaycastRef(pos4, camera_dir_tilted4, range2, nullptr, filter);
+                                        auto raycast_ref6 = MiscThings::GetRaycastRef(pos5, camera_dir_tilted5, range2, nullptr, filter);
+                                        auto raycast_ref7 = MiscThings::GetRaycastRef(pos6, camera_dir_tilted6, range2, nullptr, filter);
+                                        auto raycast_ref8 = MiscThings::GetRaycastRef(pos7, camera_dir_tilted7, range2, nullptr, filter);
+                                        auto raycast_ref9 = MiscThings::GetRaycastRef(pos8, camera_dir_tilted8, range2, nullptr, filter);
 
 
-                                        auto raycast_ref21 = MiscThings::GetRaycastRef(hand_pos, camera_dir_tilted1, range2, nullptr, 0b00000000000010010000000000000110);
-                                        auto raycast_ref31 = MiscThings::GetRaycastRef(hand_pos, camera_dir_tilted2, range2, nullptr, 0b00000000000010010000000000000110);
-                                        auto raycast_ref41 = MiscThings::GetRaycastRef(hand_pos, camera_dir_tilted3, range2, nullptr, 0b00000000000010010000000000000110);
-                                        auto raycast_ref51 = MiscThings::GetRaycastRef(hand_pos, camera_dir_tilted4, range2, nullptr, 0b00000000000010010000000000000110);
-                                        auto raycast_ref61 = MiscThings::GetRaycastRef(hand_pos, camera_dir_tilted5, range2, nullptr, 0b00000000000010010000000000000110);
-                                        auto raycast_ref71 = MiscThings::GetRaycastRef(hand_pos, camera_dir_tilted6, range2, nullptr, 0b00000000000010010000000000000110);
-                                        auto raycast_ref81 = MiscThings::GetRaycastRef(hand_pos, camera_dir_tilted7, range2, nullptr, 0b00000000000010010000000000000110);
-                                        auto raycast_ref91 = MiscThings::GetRaycastRef(hand_pos, camera_dir_tilted8, range2, nullptr, 0b00000000000010010000000000000110);
+                                        auto raycast_ref21 = MiscThings::GetRaycastRef(hand_pos, camera_dir_tilted1, range2, nullptr, filter);
+                                        auto raycast_ref31 = MiscThings::GetRaycastRef(hand_pos, camera_dir_tilted2, range2, nullptr, filter);
+                                        auto raycast_ref41 = MiscThings::GetRaycastRef(hand_pos, camera_dir_tilted3, range2, nullptr, filter);
+                                        auto raycast_ref51 = MiscThings::GetRaycastRef(hand_pos, camera_dir_tilted4, range2, nullptr, filter);
+                                        auto raycast_ref61 = MiscThings::GetRaycastRef(hand_pos, camera_dir_tilted5, range2, nullptr, filter);
+                                        auto raycast_ref71 = MiscThings::GetRaycastRef(hand_pos, camera_dir_tilted6, range2, nullptr, filter);
+                                        auto raycast_ref81 = MiscThings::GetRaycastRef(hand_pos, camera_dir_tilted7, range2, nullptr, filter);
+                                        auto raycast_ref91 = MiscThings::GetRaycastRef(hand_pos, camera_dir_tilted8, range2, nullptr, filter);
 
 
 
@@ -1355,7 +1533,7 @@ namespace MiscThings {
 
 
                                     
-
+                                    
 
                                     auto raycast_ref = MiscThings::GetRaycastRef(projectile_pos, projectile_fly_vector, 3000.0f, nullptr, 0b00001000000000000000000000000110);
 
@@ -3825,6 +4003,28 @@ namespace MiscThings {
         {
             switch (target->formID)
             {
+            case (0x4017f8a): //book4 apocrypha end
+                return 300.0f;
+
+
+            case (0x401add1):
+            case (0x401add5):
+            case (0x401add6):
+            case (0x401add7):
+            case (0x401add8):
+            case (0x401add9):
+            case (0x401adda):
+            case (0x401addb):
+            case (0x401addc):
+            case (0x401addd):
+            case (0x401adde):
+            case (0x401addf):
+                return 10.0f; //vahlok tomb platforms. ideally want 0 but dont know what will happen. pause before continuing walk is controlled in walker
+
+
+            case (0x401add0): //vahlok tomb, floating platforms handle under tablet, need to go back to it from other side, tried to interact through tablet stand
+                return 50.0f;
+
 
             case (0xed7e7): //goldur dungeon, reward chest. a bit too far beyond navmesh
                 return 300.0f;
@@ -4198,6 +4398,18 @@ namespace MiscThings {
     }
 
 
+    float GetLightLevel(RE::TESObjectREFR* object)
+    {
+        if (object && object->IsActor())
+        {
+            auto actor = (RE::Actor*)object;
+
+            if (actor->GetHighProcess())
+                return actor->GetHighProcess()->lightLevel;
+        }
+        return 0.0f;
+    }
+
 
     bool IsInDangerousWater(RE::TESObjectREFR* object)
     {
@@ -4457,7 +4669,11 @@ namespace MiscThings {
         }
 
 
-
+        if (player_worldspace && player_worldspace->formID == 0x46033) //whiterun balcony fight with odahviing
+        {
+            RE::NiPoint3 balcony_pos = {31104.8184, 4647.11865, -205.484146 };
+            return balcony_pos;
+        }
 
 
         player_pos.z += 2000.0f; //pretend player is high so it prefers higher points, like top of mountain
@@ -4792,6 +5008,25 @@ namespace MiscThings {
         camera_dirX.z = 0.0f;
         camera_dirX.Unitize();
 
+        /*
+        if (camera->IsInThirdPerson())
+        {
+            //need to use player model vector
+            auto player_3d = player->GetCurrent3D();
+            if (player_3d)
+            {
+                camera_dirX = player_3d->world.rotate.GetVectorX();
+                camera_dirY = player_3d->world.rotate.GetVectorY();
+
+                camera_dirY.z = 0.0f;
+                camera_dirY.Unitize();
+
+                camera_dirX.z = 0.0f;
+                camera_dirX.Unitize();
+            }
+        }
+        */
+
         float score = 0.0f;
 
         DebugAPI_IMPL::DebugAPI::GetSingleton()->LinesToDraw.clear();
@@ -4802,7 +5037,7 @@ namespace MiscThings {
                 RE::NiPoint3 up = { 0.0f, 0.0f, 1.0f };
                 //auto raycast_start = player_pos + camera_dirX * (5.0f - (float)i) * 20.0f + up*j*10.0f;
                 auto raycast_start = player_pos + camera_dirX * (15.0f - (float)i) * 2.0f + up * (j + 1) * 4.0f;
-                bool hit = MiscThings::GetRaycastRef(raycast_start, camera_dirY, 50.0f, nullptr, 0b00000000000010010000000000000010); //this mask works on fences
+                bool hit = MiscThings::GetRaycastRef(raycast_start, camera_dirY, 50.0f, nullptr, MiscThings::get_player_projectile_filter()); //this mask works on fences
 
                 /*
                 auto color = DebugAPI_IMPL::DrawDebug::Colors::GRN;
@@ -5440,18 +5675,98 @@ namespace MiscThings {
     }
 
 
+    bool is_fishing_rod(RE::TESForm* form)
+    {
+        if (form)
+        {
+            switch (form->formID)
+            {
+            case (0x05000850):
+            case (0x0500084d):
+            case (0x0500084e):
+            case (0x0500084f):
+                return true;
 
-    bool player_has_fishing_rod()
+            }
+        }
+
+        return false;
+    }
+
+
+    bool is_pickaxe(RE::TESForm* form)
+    {
+        if (form)
+        {
+            switch (form->formID)
+            {
+            case (0x40398e6):
+            case (0x40179c9):
+            case (0x40206f2):
+            case (0x1019d4):
+            case (0x6a707):
+            case (0xe3c16):
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+
+    bool is_fishing_supplies(RE::TESForm* form)
+    {
+        if (form)
+        {
+            return form->formID == 0x5000806 || form->formID == 0x50008d0 || form->formID == 0x50008d1 || form->formID == 0x50008a6 || form->formID == 0x500089f;
+        }
+
+        return false;
+    }
+
+
+    int get_fishing_rod_amount()
+    {
+        int result = 0;
+        auto inventory = get_filtered_inventory();
+        for (auto& [item, data] : inventory)
+        {
+            if (item && MiscThings::is_fishing_rod(item))
+            {
+                result += data.first;
+            }
+        }
+        return result;
+    }
+
+    int get_pickaxe_amount()
+    {
+        int result = 0;
+        auto inventory = get_filtered_inventory();
+        for (auto& [item, data] : inventory)
+        {
+            if (item && MiscThings::is_pickaxe(item))
+            {
+                result += data.first;
+            }
+        }
+        return result;
+    }
+
+
+    RE::TESBoundObject* get_random_fishing_rod_from_inventory()
     {
         auto inventory = get_filtered_inventory();
 
         std::vector<RE::TESForm*> fishing_poles{};
 
-        fishing_poles.push_back(RE::TESObjectWEAP::LookupByID(0x05000850));
-        fishing_poles.push_back(RE::TESObjectWEAP::LookupByID(0x0500084d));
-        fishing_poles.push_back(RE::TESObjectWEAP::LookupByID(0x0500084e));
-        fishing_poles.push_back(RE::TESObjectWEAP::LookupByID(0x0500084f));
+        fishing_poles.push_back(RE::TESBoundObject::LookupByID(0x05000850));
+        fishing_poles.push_back(RE::TESBoundObject::LookupByID(0x0500084d));
+        fishing_poles.push_back(RE::TESBoundObject::LookupByID(0x0500084e));
+        fishing_poles.push_back(RE::TESBoundObject::LookupByID(0x0500084f)); //normal
 
+        
+        std::map<uint32_t, bool> rods{};
 
         for (auto& [item, data] : inventory)
         {
@@ -5460,10 +5775,86 @@ namespace MiscThings {
                 auto form = item->GetFormID();
                 for (auto pole : fishing_poles)
                     if (pole && form == pole->GetFormID())
-                        return true;
-
+                    {
+                        if (rods.find(form) == rods.end())
+                        {
+                            rods.insert({ form, true });
+                        }
+                    }
             }
 
+        }
+
+        
+
+        std::vector<uint32_t> rods_vector{};
+
+        for (auto rod : rods)
+        {
+            rods_vector.push_back(rod.first);
+        }
+
+        int rod_amount = std::size(rods_vector);
+
+        if (rod_amount > 0)
+        {
+            auto choice = MiscThings::random_int_from_range(0, rod_amount - 1);
+
+            if (choice >= 0 && choice < rod_amount)
+                return (RE::TESBoundObject*)RE::TESForm::LookupByID(rods_vector.at(choice));
+        }
+        
+        return nullptr;
+    }
+
+
+    bool has_fishing_rod_equipped()
+    {
+        auto hand = MiscThings::get_hand_contents(true);
+
+        if (hand)
+        {
+            if (hand->formID == 0x05000850 ||
+                hand->formID == 0x0500084d ||
+                hand->formID == 0x0500084e ||
+                hand->formID == 0x0500084f
+                )
+                return true;
+        }
+
+        hand = MiscThings::get_hand_contents(false);
+
+        if (hand)
+        {
+            if (hand->formID == 0x05000850 ||
+                hand->formID == 0x0500084d ||
+                hand->formID == 0x0500084e ||
+                hand->formID == 0x0500084f
+                )
+                return true;
+        }
+
+        return false;
+    }
+
+
+
+    bool player_has_fishing_rod()
+    {
+        auto inventory = get_filtered_inventory();
+
+        std::vector<RE::TESBoundObject*> fishing_poles{};
+
+        fishing_poles.push_back((RE::TESBoundObject*)RE::TESObjectWEAP::LookupByID(0x05000850));
+        fishing_poles.push_back((RE::TESBoundObject*)RE::TESObjectWEAP::LookupByID(0x0500084d));
+        fishing_poles.push_back((RE::TESBoundObject*)RE::TESObjectWEAP::LookupByID(0x0500084e));
+        fishing_poles.push_back((RE::TESBoundObject*)RE::TESObjectWEAP::LookupByID(0x0500084f)); //normal
+
+
+        for (auto pole : fishing_poles)
+        {
+            if (inventory.find(pole) != inventory.end())
+                return true;
         }
 
         return false;
@@ -6918,6 +7309,130 @@ namespace MiscThings {
     }
 
 
+    bool fishing_ask_for_more = false;
+    bool fishing_request_sent = false;
+    bool fishing_choice_valid = false;
+    int fishing_choice = -1;
+
+    void set_fishing_ask_for_more()
+    {
+        fishing_ask_for_more = true;
+    }
+
+
+
+    std::pair<bool, std::string> set_fishing_choice(int id)
+    {
+        std::pair<bool, std::string> result{};
+
+        if (!fishing_request_sent)
+        {
+            result.first = true;
+            result.second = "[Error]";
+        }
+        else
+        {
+            if (id == 0 || id == 1)
+            {
+                fishing_choice_valid = true;
+                fishing_choice = id;
+                result.first = true;
+                result.second = "[Processing...]";
+            }
+            else
+            {
+                result.first = false;
+                result.second = "[Invalid choice ID]";
+            }
+        }
+        return result;
+    }
+
+
+    void reset_fishing()
+    {
+        fishing_ask_for_more = false;
+        fishing_request_sent = false;
+        fishing_choice_valid = false;
+        fishing_choice = -1;
+    }
+
+
+
+
+
+    RE::TESObjectREFR* find_fishing_supplies_nearby()
+    {
+        auto player = RE::PlayerCharacter::GetSingleton();
+
+        RE::TESObjectREFR* result = nullptr;
+
+        RE::TES::GetSingleton()->ForEachReferenceInRange(player, 1000.0f,
+            [&](RE::TESObjectREFR* a_ref) {
+
+                if (a_ref)
+                {
+                    auto base_obj = a_ref->GetBaseObject();
+                    RE::FormType base_type{};
+                    if (MiscThings::is_fishing_supplies(base_obj))
+                    {
+                        result = a_ref;
+                        return RE::BSContainer::ForEachResult::kStop;
+                    }
+                }
+                return RE::BSContainer::ForEachResult::kContinue;
+            });
+
+        return result;
+    }
+
+
+
+    void fishing_processor(float dtime)
+    {
+        if (fishing_ask_for_more)
+        {
+            if (!fishing_request_sent)
+            {
+                unregister_all_actions();
+
+                if (force_choice({ {0, "No"},{1, "Yes"} }, "Would you like to fish more?", force_type::fish_more))
+                {
+                    fishing_request_sent = true;
+
+                }
+            }
+            else
+            {
+                if (fishing_choice_valid)
+                {
+                    if (fishing_choice)
+                    {
+                        auto fishing_supplies = find_fishing_supplies_nearby();
+
+                        if (fishing_supplies)
+                        {
+                            send_random_context(WalkerProcessor::walk_to_object_by_refr(fishing_supplies, 1).second, true);
+                        }
+                        else
+                            send_random_context("Cant find fishing supplies nearby!", false);
+
+                        reset_fishing();
+                    }
+                    else
+                    {
+                        reset_fishing();
+                    }
+
+                }
+            }
+        }
+        else
+            reset_fishing();
+    }
+
+
+
     void settlement_places_processor(float dtime)
     {
         if (settlement_places_processor_timer > 1.0f)
@@ -7000,6 +7515,12 @@ namespace MiscThings {
 
 
                         std::string force_text = "You are in " + get_settlement_name() + ". Choose a place to visit" + nighttime_text + ". You have " + std::to_string(player_gold) + " gold" + gold_amount_bonus;
+
+                        std::string junk_list = MiscThings::get_junk_list();
+
+                        if (junk_list != "")
+                            force_text += "; " + junk_list;
+
 
                         unregister_all_actions();
 
@@ -7665,15 +8186,20 @@ namespace MiscThings {
 
                                 auto teleport_worldspace = teleport.ref->GetWorldspace();
 
-                                if (teleport_worldspace == player_worldspace && !shortcut_used)
+                                //so for player we never use shortcut. teleport path is 100% valid entirely.
+                                //for markers - we need to start from LAST door that leads away from marker's parent worldspace.
+                                if (teleport_worldspace == player_worldspace && start->formID != 0x14) //this is made only for markers, because calculating distance for them still uses player's teleport path. so map markers should start calculating distance from their own worldspace
                                 {
-                                    shortcut_used = true;
                                     result = 0.0f;
                                     result += player_pos.GetDistance(teleport_pos);
                                     last_teleport_pos_end = teleport.teleportLocation;
                                 }
                                 else
                                 {
+                                    if (player_worldspace && teleport_worldspace && player_worldspace != teleport_worldspace)
+                                        result += 10000.0f; //penalty for worldspace jump
+
+
                                     if (last_teleport_pos_end == RE::NiPoint3::Zero())
                                     {
                                         result += player_pos.GetDistance(teleport_pos);
@@ -7941,9 +8467,6 @@ namespace MiscThings {
                                     quest_target_ref = quest_ref_handle.get().get();
 
 
-                            if (marker_name == "Fort Dawnguard")
-                                bool stop_here = false; //REMOVE THIS
-
                             //distance from quest to location
                             auto distance_quest_location = get_quest_target_distance(target, quest, real_marker, phantom_target);
 
@@ -7979,8 +8502,8 @@ namespace MiscThings {
             }
         }
 
-        //if distance from location to quest is less than 200m
-        if (min_distance <= 25000.0f && sublocation_name != "")
+        //if distance from location to quest is less than 450m
+        if (min_distance <= 45000.0f && sublocation_name != "")
         {
             return sublocation_name;
         }
@@ -9180,11 +9703,352 @@ namespace MiscThings {
         if (!quest)
             return nullptr;
 
+        if (quest->formID == 0x3372b && quest->currentStage == 160)
+        {
+            if (target && target->formID == 0x2bf9e)
+            {
+                auto attack_quest = (RE::TESQuest*)RE::TESForm::LookupByID(0xd0593);
+                if (attack_quest && attack_quest->currentStage >= 50 && attack_quest->currentStage < 103)
+                {
+                    auto scene = (RE::BGSScene*)RE::TESForm::LookupByID(0xd0594);
 
+                    if (scene && scene->unkBC >= 12) //phase
+                    {
+                        auto redirect = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0xff8ca);
+                        if (redirect) return redirect;
+                    }
+                }
+            }
+        }
+
+
+        if (quest && quest->formID == 0x44c56 && quest->currentStage == 150) //call dragon mq301
+        {
+            if (player_worldspace)
+            {
+                if (player_worldspace->formID == 0x3c) //tamriel
+                {
+                    if (target && target->formID != 0x1b1f1) //city gates
+                    {
+                        auto city_gates = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x1b1f1);
+                        if (city_gates)
+                            return city_gates;
+                    }
+                }
+
+                if (player_worldspace->formID == 0x1a26f) //whiterun
+                {
+                    if (target && target->formID != 0x1a704) //dragonsreach doors
+                    {
+                        auto dragonsreach_doors = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x1a704);
+                        if (dragonsreach_doors)
+                            return dragonsreach_doors;
+                    }
+                }
+
+                if (player_worldspace->formID == 0x46033) //dragonsreach battle balcony
+                {
+                    auto odahviing = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x45921);
+                    if (odahviing && odahviing->IsDisabled())
+                    {
+                        auto old_marker = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x46efb);
+                        if (old_marker)
+                            return old_marker;
+                    }
+                }
+            }
+            else
+            {
+                if (parent_cell && parent_cell->formID == 0x165a3) //dragonsreach
+                {
+                    if (target && target->formID != 0x46b84) //dragonsreach balcony entrance from dragonsreach
+                    {
+                        auto dragonsreach_doors = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x46b84);
+                        if (dragonsreach_doors)
+                            return dragonsreach_doors;
+                    }
+                }
+            }
+        }
+
+        if (quest && quest->formID == 0x1ea58) //db09
+        {
+            if (quest->currentStage == 40)//potentially bugged stage
+            {
+                if (target && target->formID == 0x4bcc4) //gianna
+                {
+                    auto redirect = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x1e4e2); //locked door
+                    if (redirect) return redirect;
+                }
+            }
+
+            if (quest->currentStage == 60) //outside. cant walk properly need to go to marker to trigger scene
+            {
+                if (player_worldspace && player_worldspace->GetFormID() == 0x37edf) //solitude
+                {
+                    auto redirect = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x10fddb); //locked door
+                    if (redirect) return redirect;
+                }
+            }
+        }
         
         if (target)
         {
             auto target_pos = target->GetPosition();
+
+
+            if (parent_cell && parent_cell->formID == 0x40142ee) //dlc2 unearthed ahzidal quest dungeon. redirect to grab the artefact after quest stage done
+            {
+                if (quest && quest->formID == 0x401810b)
+                {
+                    if (target->formID == 0x4018105) //exit door. grab artefact 
+                    {
+                        auto unearthed_quest = (RE::TESQuest*)RE::TESQuest::LookupByID(0x401810b);//DLC2dunKolbjornQST
+                        if (unearthed_quest)
+                        {
+                            if (unearthed_quest->currentStage == 150)
+                            {
+                                auto artefact = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4020d65); //boots
+                                if (artefact && artefact->GetPosition().GetDistance({ -3291.13647, 161.092285, 2018.83508 }) < 30.0f && artefact->modelState != 0) //original position
+                                    return artefact;
+                            }
+
+                            if (unearthed_quest->currentStage == 250)
+                            {
+                                auto artefact = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4020d4e); //ring1
+                                if (artefact && artefact->GetPosition().GetDistance({ -1921.46814, -819.037415, 2011.45959 }) < 30.0f && artefact->modelState != 0) //original position
+                                {
+                                    auto rotating_door = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4020d40);
+                                    auto handle = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4020d4c);
+                                    if (rotating_door && handle && MiscThings::two_state_activator_state(rotating_door) == 1)
+                                        return handle;
+                                    else
+                                        return artefact;
+                                }
+                            }
+
+                            if (unearthed_quest->currentStage == 350)
+                            {
+                                //just open all this so its opened:
+                                auto gate1 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4020cab);
+                                auto gate2 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x401814d);
+                                auto chain1 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4020d2a);
+                                auto chain2 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4018165);
+
+                                if (gate1 && gate2 && chain1 && chain2)
+                                {
+                                    if (MiscThings::two_state_activator_state(gate1) == 1)
+                                        return chain1;
+
+                                    if (MiscThings::two_state_activator_state(gate2) == 1)
+                                        return chain2;
+                                }
+
+
+                                //try to grab ring
+                                auto dummy = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x70c1a25);
+                                auto artefact1 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4027808); //ring2
+                                if (!Observer::get_dlc2_ahzidal_ring2_disagreed_to_solve_puzzle() && dummy && artefact1 && artefact1->GetPosition().GetDistance({ -3456.26, -3689.05, 1085.77 }) < 30.0f && artefact1->modelState != 0) //original position
+                                {
+                                    auto gate_ring = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4020c7d);
+                                    if (gate_ring && MiscThings::two_state_activator_state(gate_ring) == 1)
+                                    {
+                                        dummy->MoveTo(player);
+                                        MiscThings::SetPosition_moveto(dummy, { -3472.58105, -3205.05225, 1118.22668 });
+                                        return dummy;
+                                    }
+                                    else
+                                        return artefact1;
+                                }
+                                
+
+
+                                //grab gauntlets
+                                auto artefact2 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4020d30); //gauntlets
+                                if (artefact2 && artefact2->GetPosition().GetDistance({ -1408.36804, -958.914429, 1617.92407 }) < 30.0f && artefact2->modelState != 0) //original position
+                                {
+                                    auto rotating_door = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4018146);
+                                    auto handle = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x40182b3);
+                                    if (rotating_door && handle && MiscThings::two_state_activator_state(rotating_door) == 1)
+                                        return handle;
+                                    else
+                                        return artefact2;
+                                }
+                            }
+
+                            if (unearthed_quest->currentStage > 350)
+                            {
+                                //duplicate grab the ring if we didnt do it last time
+                                auto dummy = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x70c1a25);
+                                auto artefact1 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4027808); //ring2
+                                if (!Observer::get_dlc2_ahzidal_ring2_disagreed_to_solve_puzzle() && dummy && artefact1 && artefact1->GetPosition().GetDistance({ -3456.26, -3689.05, 1085.77 }) < 30.0f && artefact1->modelState != 0) //original position
+                                {
+                                    auto gate_ring = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4020c7d);
+                                    if (gate_ring && MiscThings::two_state_activator_state(gate_ring) == 1)
+                                    {
+                                        dummy->MoveTo(player);
+                                        MiscThings::SetPosition_moveto(dummy, { -3472.58105, -3205.05225, 1118.22668 });
+                                        return dummy;
+                                    }
+                                    else
+                                        return artefact1;
+                                }
+                            }
+
+
+
+                        }
+                    }
+
+
+                    if (quest->currentStage >= 210 && quest->currentStage < 250) //phase2 puzzles
+                    {
+                        auto rotating_door1 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4018144);
+                        auto rotating_door2 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4020d39);
+                        auto chain1 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x40182b5);
+                        auto chain2 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x40182b4);
+
+                        auto gate1 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4027a71);
+                        auto gate2 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4027a72);
+                        auto gate3 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4020d4b);
+
+                        auto dummy = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x70c1a25);
+
+                        if (rotating_door1 && rotating_door2 && chain1 && chain2 && gate1 && gate2 && gate3 && dummy)
+                        {
+                            if (MiscThings::two_state_activator_state(rotating_door1) == 1)
+                                return chain1;
+
+                            if (MiscThings::two_state_activator_state(rotating_door2) == 1)
+                                return chain2;
+
+
+                            if (MiscThings::two_state_activator_state(gate1) == 1 ||
+                                MiscThings::two_state_activator_state(gate2) == 1 ||
+                                MiscThings::two_state_activator_state(gate3) == 1
+                                )
+                            {
+                                dummy->MoveTo(player);
+                                MiscThings::SetPosition_moveto(dummy, { -1988.63831, 1250.27991, 1726.88306 });
+                                return dummy;
+                            }
+                        }
+                    }
+
+                    if (quest->currentStage >= 310 && quest->currentStage < 350)
+                    {
+                        auto phase3_track_quest = (RE::TESQuest*)RE::TESQuest::LookupByID(0x40277ea);//DLC2dunKolbjornPhase3TrackingQST
+
+                        if ((target && target->formID == 0x40179b8) || (phase3_track_quest && phase3_track_quest->currentStage == 0))
+                        {
+                            auto redirect_guard = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4027ad8);
+                            if (redirect_guard)
+                                return redirect_guard;
+                        }
+                    }
+
+
+                }
+
+
+
+
+
+
+            }
+
+
+
+            if (parent_cell && parent_cell->formID == 0x401a7a8) //dlc2 black book riekling cave
+            {
+                if (target_pos.x > 1485.0f && target_pos.y < -330.0f && !(player_pos.x > 1485.0f && player_pos.y < -330.0f))
+                {
+                    auto gate = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4024e9b);
+                    if (gate && MiscThings::two_state_activator_state(gate) == 1)
+                    {
+                        auto redirect_chest = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4024ee9);
+                        if (redirect_chest) return redirect_chest;
+                    }
+                }
+            }
+
+            if (target->formID == 0x4033c26) //dlc2 white ridge barrow for black book 6, exit. need to grab key
+            {
+                if (MiscThings::is_door_locked(target))
+                {
+                    auto key_lady = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x40285c7);
+                    if (key_lady)
+                    {
+                        return key_lady;
+                    }
+                }
+            }
+
+
+            if (target->formID == 0x401ee1c) //dlc2 white ridge barrow for black book 6, spider dungeon part2. the book
+            {
+                auto cobweb = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x401ca53);
+                if (cobweb && MiscThings::get_destructible_state(cobweb) == -1)
+                {
+                    auto dummy = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x70c1a25);
+                    if (dummy)
+                    {
+                        dummy->MoveTo(player);
+                        MiscThings::SetPosition_moveto(dummy, { 10550.2188, -7661.95557, -494.788116 });
+                        return dummy;
+                    }
+                }
+            }
+
+            if (target->formID == 0x403c7fa) //dlc2 white ridge barrow for black book 6, spider dungeon
+            {
+                if (parent_cell && parent_cell->formID == 0x40142ed && player_pos.z > 850.0f)
+                {
+                    auto dummy = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x70c1a25);
+                    if (dummy)
+                    {
+                        dummy->MoveTo(player);
+                        MiscThings::SetPosition_moveto(dummy, { 7308.63525, 1837.52222, 497.965118 });
+                        return dummy;
+                    }
+                }
+
+                /*
+                auto bridge1 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x40193c2);
+                if (bridge1 && MiscThings::two_state_activator_state(bridge1) == 0)
+                {
+                    auto dummy = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x70c1a25);
+                    if (dummy)
+                    {
+                        dummy->MoveTo(player);
+                        MiscThings::SetPosition_moveto(dummy, { 11027.4131, 271.814606, -409.781616 });
+                        return dummy;
+                    }
+                }
+                */
+            }
+
+
+
+            if (target->formID == 0x401aa10) //dlc2 cave with blackbook, redirect to another door
+            {
+                auto secret_door = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x401aa11);
+                if (secret_door && MiscThings::two_state_activator_state(secret_door) == 1)
+                {
+                    RE::NiPoint2 a = { -1174.26794, 2551.71362 }; //-5733.7241
+                    RE::NiPoint2 b = { -447.895569, 1823.758170 }; //-5633.2554
+                    RE::NiPoint2 c = { 903.323853, 3171.84814 }; //-5640.6494
+                    RE::NiPoint2 d = { 176.951482, 3899.803590 }; //-5724.9077
+
+                    RE::NiPoint2 p = { player_pos.x, player_pos.y };
+                    if (!MiscThings::is_inside_of_rectangle(p, a, b, c, d))
+                    {
+                        auto good_door = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x401a929);
+                        if (good_door) return good_door;
+                    }
+                }
+            }
+
 
 
             if (parent_cell && parent_cell->formID == 0x401be37) //dlc2 morag tong fort served cold quest
@@ -9462,6 +10326,243 @@ namespace MiscThings {
                 }
             }
         }
+
+
+        if (quest && quest->formID == 0x4019b4a) //dlc2 lost legacy. vahloks tomb. DLC2SV01
+        {
+            if (parent_cell && parent_cell->formID == 0x40142ef) //the tomb
+            {
+                if (!MiscThings::GetStageDone(quest, 305))
+                {
+                    //1. burn some draugr puzzle.
+                    if (MiscThings::GetStageDone(quest, 701))
+                    {
+                        //we are told what to do. go to floor gate
+                        auto floor_gate_activator = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4025aa3);
+                        if (floor_gate_activator)
+                            return floor_gate_activator; //when arrived - give advice from walker. include draugrs, and handle. must depend on if we already put draugr onto gate
+                    }
+                    else
+                    {
+                        //no info what to do yet. wait for guy to show up, redirect to tablet.
+                        auto tablet_activator_1 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x40347d1);
+                        if (tablet_activator_1)
+                            return tablet_activator_1;
+                    }
+                }
+
+
+                if (!MiscThings::GetStageDone(quest, 325))
+                {
+                    //2. pressure plates + draugr miniboss with claw
+                    if (MiscThings::GetStageDone(quest, 703))
+                    {
+                        //we are told what to do. again to to the tablet. tablet reading is caught in randommessagebox processor
+                        auto tablet_activator_2 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x40347d3);
+                        if (tablet_activator_2)
+                            return tablet_activator_2;
+                    }
+                    else
+                    {
+                        //no info what to do yet. wait for guy to show up, redirect to tablet.
+                        auto tablet_activator_2 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x40347d3);
+                        if (tablet_activator_2)
+                            return tablet_activator_2;
+                    }
+                }
+
+
+                //THIS NEEDS TO BE WRAPPED AROUND OTHER STAGE CHECK. CLAW WILL BE TEMPORARY LOST UPON USAGE (or maybe no. check it later)
+                //now kill the boss of this puzzle and loot his claw
+                auto boss1 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x401cac2);
+                if (boss1)
+                {
+                    if (!boss1->IsDead())
+                        return boss1;
+                    else
+                    {
+                        //boss is dead. check if player has the claw
+                        auto claw_right = (RE::TESBoundObject*)RE::TESForm::LookupByID(0x401cac1);
+                        if (claw_right)
+                        {
+                            if (player->GetItemCount(claw_right) < 1)
+                                return boss1;
+                        }
+                    }
+                }
+
+
+                if (!MiscThings::GetStageDone(quest, 315))
+                {
+                    //3. colors (bow/magic/melee)
+                    if (MiscThings::GetStageDone(quest, 702))
+                    {
+                        //we are told what to do. go to central pillar. give some advice upon arrival from walker
+                        auto big_pillar = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4032234);
+                        if (big_pillar)
+                            return big_pillar;
+                    }
+                    else
+                    {
+                        //no info what to do yet. wait for guy to show up, redirect to tablet.
+                        auto tablet_activator_3 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x40347d4);
+                        if (tablet_activator_3)
+                            return tablet_activator_3;
+                    }
+                }
+
+
+
+                //THIS NEEDS TO BE WRAPPED AROUND OTHER STAGE CHECK. CLAW WILL BE TEMPORARY LOST UPON USAGE (or maybe no. check it later)
+                //now kill the boss of this puzzle and loot his claw
+                auto boss2 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x401caba);
+                if (boss2)
+                {
+                    if (!boss2->IsDead())
+                        return boss2;
+                    else
+                    {
+                        //boss is dead. check if player has the claw
+                        auto claw_left = (RE::TESBoundObject*)RE::TESForm::LookupByID(0x401cac0);
+                        if (claw_left)
+                        {
+                            if (player->GetItemCount(claw_left) < 1)
+                                return boss2;
+                        }
+                    }
+                }
+
+
+                //now we have 2 parts of claw. go center to platform puzzle
+                if (!MiscThings::GetStageDone(quest, 330))
+                {
+                    //keyholes not done. redirect to gate, give advice upon arrival (advice must check stage)
+                    auto gate = (RE::TESObjectREFR*)RE::TESForm::LookupByID(0x401adc9);
+                    if (gate)
+                        return gate;
+                }
+
+
+                if (!MiscThings::GetStageDone(quest, 335))
+                {
+                    auto platforms_goal_1 = (RE::TESObjectREFR*)RE::TESForm::LookupByID(0x401add2);
+                    if (platforms_goal_1)
+                    {
+                        auto object_p = MiscThings::General::Script::GetObject(platforms_goal_1, "defaultActivateSelf");
+                        if (object_p)
+                        {
+                            std::string state = "";
+                            state = object_p->currentState;
+
+                            if (state != "alldone")
+                            {
+                                if (!MiscThings::GetStageDone(quest, 704))
+                                {
+                                    auto tablet = (RE::TESObjectREFR*)RE::TESForm::LookupByID(0x40347d6);
+                                    if (tablet)
+                                        return tablet;
+                                }
+
+
+                                auto dummy = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x70c1a25);
+                                if (dummy)
+                                {
+                                    dummy->MoveTo(player);
+                                    MiscThings::SetPosition_moveto(dummy, { 9173.54004, -1701.36243, 3.80842280 });
+
+                                    return dummy;
+                                }
+                            }
+                        }
+                    }
+                }
+
+
+                if (!MiscThings::GetStageDone(quest, 610))
+                {
+                    auto platforms_goal_2 = (RE::TESObjectREFR*)RE::TESForm::LookupByID(0x4024be6);
+                    if (platforms_goal_2)
+                    {
+                        auto object_p = MiscThings::General::Script::GetObject(platforms_goal_2, "defaultActivateSelf");
+                        if (object_p)
+                        {
+                            std::string state = "";
+                            state = object_p->currentState;
+
+                            if (state != "alldone")
+                            {
+                                auto dummy = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x70c1a25);
+                                if (dummy)
+                                {
+                                    dummy->MoveTo(player);
+                                    MiscThings::SetPosition_moveto(dummy, { 9182.87402, -5049.63037, -164.473969 });
+
+                                    return dummy;
+                                }
+                            }
+                        }
+                    }
+                }
+
+
+
+                if (!MiscThings::GetStageDone(quest, 620))
+                {
+                    auto platforms_goal_3 = (RE::TESObjectREFR*)RE::TESForm::LookupByID(0x4024beb);
+                    if (platforms_goal_3)
+                    {
+                        auto object_p = MiscThings::General::Script::GetObject(platforms_goal_3, "defaultActivateSelf");
+                        if (object_p)
+                        {
+                            std::string state = "";
+                            state = object_p->currentState;
+
+                            if (state != "alldone")
+                            {
+                                auto dummy = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x70c1a25);
+                                if (dummy)
+                                {
+                                    dummy->MoveTo(player);
+                                    MiscThings::SetPosition_moveto(dummy, { 7568.76074, -6767.94141, -118.531471 });
+
+                                    return dummy;
+                                }
+                            }
+                        }
+                    }
+                }
+
+
+                if (!MiscThings::GetStageDone(quest, 630))
+                {
+                    auto platforms_goal_4 = (RE::TESObjectREFR*)RE::TESForm::LookupByID(0x4024bf1);
+                    if (platforms_goal_4)
+                    {
+                        auto object_p = MiscThings::General::Script::GetObject(platforms_goal_4, "defaultActivateSelf");
+                        if (object_p)
+                        {
+                            std::string state = "";
+                            state = object_p->currentState;
+
+                            if (state != "alldone")
+                            {
+                                auto dummy = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x70c1a25);
+                                if (dummy)
+                                {
+                                    dummy->MoveTo(player);
+                                    MiscThings::SetPosition_moveto(dummy, { 5852.50488, -8376.47656, -185.283752 });
+
+                                    return dummy;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+
+
 
         if (parent_cell && parent_cell->formID == 0x151fa)
         {
@@ -11986,14 +13087,23 @@ namespace MiscThings {
                 auto vald_side_gate = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x9e57a);
 
                 if (vald && vald->IsActor() && !vald->IsDead() && vald_side_gate && vald_bottom_gate && vald_top_gate && (MiscThings::is_door_locked(vald_bottom_gate) && MiscThings::is_door_locked(vald_top_gate) && MiscThings::is_door_locked(vald_side_gate)))
-                    return vald_bottom_gate; //hope he actually always aggros when we get there and opens that gate
+                {
+                    auto vald_aggroed = ((RE::Actor*)vald)->combatController;
+
+                    //auto now = std::chrono::steady_clock::now().time_since_epoch().count();
+                    //bool rotate_left = ((int)(((double)now / 1000000000.0) / 30.0)) % 2;
+                    if (vald_aggroed)
+                        return vald_top_gate; //this is a bullshit quest 
+                    else
+                        return vald_bottom_gate; //hope he actually always aggros when we get there and opens that gate
+                }
+                    
 
                 if (shoot_point_marker && top_door && ramp_mechanism && shoot_marker && MiscThings::two_state_activator_state(ramp_mechanism) != 0 && (target == top_door || target == shoot_marker || target == shoot_point_marker))
                     return shoot_point_marker;
                 else
-                    if (top_door && target == top_door && MiscThings::is_door_locked(top_door) && MiscThings::get_picks_amount_int() <= 0)
+                    if (top_door && target == top_door && MiscThings::is_door_locked(top_door))
                     {
-                        
                         if (vald)
                             return vald; //grab the key if door is locked and we have no lockpicks
                     }
@@ -12436,6 +13546,23 @@ namespace MiscThings {
             {
                 return skuldafn_web;
             }
+            else
+            {
+                RE::TESObjectREFR* bridge = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0xa751d);
+                if (bridge && MiscThings::two_state_activator_state(bridge) == 0) //bridge is up
+                {
+                    auto dummy = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x70c1a25);
+                    if (dummy)
+                    {
+                        RE::NiPoint3 redirect_pos = { -414.847260, 11800.7383, 1854.62122 };
+                        dummy->MoveTo(player);
+                        MiscThings::SetPosition_moveto(dummy, redirect_pos);
+                        return dummy;
+                    }
+
+                }
+            }
+
         }
 
 
@@ -12772,6 +13899,31 @@ namespace MiscThings {
         }
 
 
+        if (quest && quest->formID == 0xd661c) //bring axe of ulfric to whiterun jarl CW03
+        {
+            auto peace_quest = (RE::TESQuest*)RE::TESForm::LookupByID(0x45923); //peace council quest, MQ302. whiterun jarl will NOT talk about axe and wont accept it when its active
+            if (peace_quest)
+            {
+                if ((peace_quest->data.flags.all(RE::QuestFlag::kDisplayedInHUD) || peace_quest->data.flags.all(RE::QuestFlag::kEnabled)) && !peace_quest->data.flags.all(RE::QuestFlag::kCompleted))
+                    return true;
+            }
+
+            auto trap_dragon_quest = (RE::TESQuest*)RE::TESForm::LookupByID(0x44c56); //trap dragon quest
+            if (trap_dragon_quest)
+            {
+                if ((trap_dragon_quest->data.flags.all(RE::QuestFlag::kDisplayedInHUD) || trap_dragon_quest->data.flags.all(RE::QuestFlag::kEnabled)) && !trap_dragon_quest->data.flags.all(RE::QuestFlag::kCompleted))
+                    return true;
+            }
+
+            auto fly_skuldafn_quest = (RE::TESQuest*)RE::TESForm::LookupByEditorID("MQ303"); //fly to skuldafn
+            if (fly_skuldafn_quest)
+            {
+                if ((fly_skuldafn_quest->data.flags.all(RE::QuestFlag::kDisplayedInHUD) || fly_skuldafn_quest->data.flags.all(RE::QuestFlag::kEnabled)) && !fly_skuldafn_quest->data.flags.all(RE::QuestFlag::kCompleted))
+                    return true;
+            }
+        }
+
+
         if (quest && quest->formID == 0xd7939) //speak to lod (DA03Start), daedra dog quest
         {
             if (quest->currentStage == 5)
@@ -12798,14 +13950,9 @@ namespace MiscThings {
         }
 
 
-        if (quest && quest->formID == 0x4019b4a) //lost legacy dlc2 quest (vahlok's tomb) - temporary hidden until its worked through
+        //if (quest && (quest->formID == 0x4027a14 || quest->formID == 0x401b65f)) //find black book quests. new books will not work 99% so just hide it for now
         {
-            return true;
-        }
-
-        if (quest && (quest->formID == 0x4027a14 || quest->formID == 0x401b65f)) //find black book quests. new books will not work 99% so just hide it for now
-        {
-            return true;
+        //    return true;
         }
 
 
@@ -12991,25 +14138,6 @@ namespace MiscThings {
                     return true;
             }
         }
-
-        /*
-        if (sovngarde_quest3)
-        {
-            auto stage = sovngarde_quest3->GetCurrentStageID();
-
-            if (stage > 0 && stage < 60)
-            {
-                if (quest != sovngarde_quest3)
-                    return true;
-            }
-        }
-        */
-
-
-        auto drag_orc_quest = (RE::TESQuest*)RE::TESForm::LookupByEditorID("DB08");
-
-        if (quest == drag_orc_quest && objective && objective->index == 15)
-            return true; //dragging corpses to hidden places is wip
 
 
         return false;
@@ -13833,7 +14961,7 @@ namespace MiscThings {
 
         if (delta_interesting > 120.0f)
         {
-            
+
             auto objects_around = GetObjectsAround(1);
 
             std::vector<std::string> very_interesting_objects{};
@@ -13850,14 +14978,104 @@ namespace MiscThings {
             if (objects_around.second.find("Ancient Nordic Door") != std::string::npos)
                 very_interesting_objects.push_back("Ancient Nordic Door");
 
-            if (objects_around.second.find("Fishing Supplies") != std::string::npos)
-                very_interesting_objects.push_back("Fishing Supplies");
+            auto fishing_supplies_pos = objects_around.second.find("[Interactive] Fishing Supplies");
+            if (fishing_supplies_pos != std::string::npos)
+            {
+                std::string advice = "But you dont have fishing rod to fish!";
 
-            if (objects_around.second.find("Butterfly") != std::string::npos)
-                very_interesting_objects.push_back("Butterfly");
+                if (MiscThings::player_has_fishing_rod())
+                    advice = "You have a fishing rod, maybe you could catch some fish (use walk_and_interact action to try fishing)";
 
-            if (objects_around.second.find("Torchbug") != std::string::npos)
-                very_interesting_objects.push_back("Torchbug");
+
+                std::string name = "Fishing Supplies..." + advice;
+
+                auto pos_bracket_first = objects_around.second.rfind('[', fishing_supplies_pos);
+
+                if (pos_bracket_first > 0 && pos_bracket_first < objects_around.second.length())
+                {
+                    auto pos_bracket = objects_around.second.rfind('[', pos_bracket_first - 1);
+
+                    if (pos_bracket > 0 && pos_bracket < objects_around.second.length() && ((fishing_supplies_pos - pos_bracket) <= 50))
+                    {
+                        name = objects_around.second.substr(pos_bracket, fishing_supplies_pos - pos_bracket) + " " + name;
+                    }
+                }
+
+
+                
+
+                very_interesting_objects.push_back(name);
+            }
+
+
+
+            fishing_supplies_pos = objects_around.second.find("Luna Moth");
+
+            if (fishing_supplies_pos != std::string::npos)
+            {
+                std::string name = "Luna Moth... you can try to catch it (using walk_and_interact action)";
+
+                auto pos_bracket_first = objects_around.second.rfind('[', fishing_supplies_pos);
+
+                if (pos_bracket_first > 0 && pos_bracket_first < objects_around.second.length())
+                {
+                    auto pos_bracket = objects_around.second.rfind('[', pos_bracket_first - 1);
+
+                    if (pos_bracket > 0 && pos_bracket < objects_around.second.length() && ((fishing_supplies_pos - pos_bracket) <= 50))
+                    {
+                        name = objects_around.second.substr(pos_bracket, fishing_supplies_pos - pos_bracket) + " " + name;
+                    }
+                }
+
+
+                very_interesting_objects.push_back(name);
+            }
+
+
+            fishing_supplies_pos = objects_around.second.find("Butterfly");
+
+            if (fishing_supplies_pos != std::string::npos)
+            {
+                std::string name = "Butterfly... you can try to catch it (using walk_and_interact action)";
+
+                auto pos_bracket_first = objects_around.second.rfind('[', fishing_supplies_pos);
+
+                if (pos_bracket_first > 0 && pos_bracket_first < objects_around.second.length())
+                {
+                    auto pos_bracket = objects_around.second.rfind('[', pos_bracket_first - 1);
+
+                    if (pos_bracket > 0 && pos_bracket < objects_around.second.length() && ((fishing_supplies_pos - pos_bracket) <= 50))
+                    {
+                        name = objects_around.second.substr(pos_bracket, fishing_supplies_pos - pos_bracket) + " " + name;
+                    }
+                }
+
+
+                very_interesting_objects.push_back(name);
+            }
+
+            fishing_supplies_pos = objects_around.second.find("Torchbug");
+
+            if (fishing_supplies_pos != std::string::npos)
+            {
+                std::string name = "Torchbug... you can try to catch it (using walk_and_interact action)";
+
+                auto pos_bracket_first = objects_around.second.rfind('[', fishing_supplies_pos);
+
+                if (pos_bracket_first > 0 && pos_bracket_first < objects_around.second.length())
+                {
+                    auto pos_bracket = objects_around.second.rfind('[', pos_bracket_first - 1);
+
+                    if (pos_bracket > 0 && pos_bracket < objects_around.second.length() && ((fishing_supplies_pos - pos_bracket) <= 50))
+                    {
+                        name = objects_around.second.substr(pos_bracket, fishing_supplies_pos - pos_bracket) + " " + name;
+                    }
+                }
+
+
+                very_interesting_objects.push_back(name);
+            }
+                
 
 
             if (std::size(very_interesting_objects) > 0)
@@ -14036,14 +15254,16 @@ namespace MiscThings {
             }
 
             //center, right, left
-            float raycast_distance = MiscThings::GetRaycastDistance(camera_pos, delta_pos, 5000.0f, target, 0b00000000000010010000000000000110);
-            float raycast_distance_right = MiscThings::GetRaycastDistance(camera_pos_right, delta_pos_right, 5000.0f, target, 0b00000000000010010000000000000110);
-            float raycast_distance_left = MiscThings::GetRaycastDistance(camera_pos_left, delta_pos_left, 5000.0f, target, 0b00000000000010010000000000000110);
+            auto filter = get_player_projectile_filter();
+
+            float raycast_distance = MiscThings::GetRaycastDistance(camera_pos, delta_pos, 5000.0f, target, filter);
+            float raycast_distance_right = MiscThings::GetRaycastDistance(camera_pos_right, delta_pos_right, 5000.0f, target, filter);
+            float raycast_distance_left = MiscThings::GetRaycastDistance(camera_pos_left, delta_pos_left, 5000.0f, target, filter);
 
 
-            auto raycast_ref = MiscThings::GetRaycastRef(camera_pos, delta_pos, 5000.0f, target, 0b00000000000010010000000000000110);
-            auto raycast_ref_right = MiscThings::GetRaycastRef(camera_pos_right, delta_pos_right, 5000.0f, target, 0b00000000000010010000000000000110);
-            auto raycast_ref_left = MiscThings::GetRaycastRef(camera_pos_left, delta_pos_left, 5000.0f, target, 0b00000000000010010000000000000110);
+            auto raycast_ref = MiscThings::GetRaycastRef(camera_pos, delta_pos, 5000.0f, target, filter);
+            auto raycast_ref_right = MiscThings::GetRaycastRef(camera_pos_right, delta_pos_right, 5000.0f, target, filter);
+            auto raycast_ref_left = MiscThings::GetRaycastRef(camera_pos_left, delta_pos_left, 5000.0f, target, filter);
 
 
             
@@ -14081,8 +15301,8 @@ namespace MiscThings {
             {
                 for (auto& subpos : camera_subpos_right)
                 {
-                    float subraycast_distance = MiscThings::GetRaycastDistance(subpos, delta_pos_right, 5000.0f, target, 0b00000000000010010000000000000110);
-                    auto subraycast_ref = MiscThings::GetRaycastRef(subpos, delta_pos_right, 5000.0f, target, 0b00000000000010010000000000000110);
+                    float subraycast_distance = MiscThings::GetRaycastDistance(subpos, delta_pos_right, 5000.0f, target, filter);
+                    auto subraycast_ref = MiscThings::GetRaycastRef(subpos, delta_pos_right, 5000.0f, target, filter);
 
                     if (subraycast_distance < (raycast_distance_right - 100.0f) && (!any_enemy || !MiscThings::is_enemy_to_actor(raycast_ref_right, false, true, true)))
                         return false; //subraycast failed
@@ -14096,8 +15316,8 @@ namespace MiscThings {
             {
                 for (auto& subpos : camera_subpos_left)
                 {
-                    float subraycast_distance = MiscThings::GetRaycastDistance(subpos, delta_pos_left, 5000.0f, target, 0b00000000000010010000000000000110);
-                    auto subraycast_ref = MiscThings::GetRaycastRef(subpos, delta_pos_left, 5000.0f, target, 0b00000000000010010000000000000110);
+                    float subraycast_distance = MiscThings::GetRaycastDistance(subpos, delta_pos_left, 5000.0f, target, filter);
+                    auto subraycast_ref = MiscThings::GetRaycastRef(subpos, delta_pos_left, 5000.0f, target, filter);
 
                     if (subraycast_distance < (raycast_distance_left - 100.0f) && (!any_enemy || !MiscThings::is_enemy_to_actor(raycast_ref_left, false, true, true)))
                         return false; //subraycast failed
@@ -14127,6 +15347,12 @@ namespace MiscThings {
         if (object->formID == 0xf5b04)
             return true; //hermaeus mora after ogma infinium pickup
 
+        if (object->formID == 0x40177d9 || object->formID == 0x401ee1e) //tel mytrin book and enchanter, count as raycastable if door to them is unlocked
+        {
+            auto door = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x403ca71);
+            if (door && !MiscThings::is_door_locked(door))
+                return true;
+        }
 
         auto player = RE::PlayerCharacter::GetSingleton();
 
@@ -14903,23 +16129,52 @@ namespace MiscThings {
 
 
 
-    //                                      |15     |7     |0
-    uint32_t my_filter4 = 0b00000101011001110000000000011110; //whiterun guard
-    uint32_t my_filter0 = 0b00000101011010101000000000011110; //bjorlams filter (has bit 15 set)
+    //                                        |15     |7     |0
+    //uint32_t my_filter4 = 0b00000101011001110000000000011110; //whiterun guard
+    //uint32_t my_filter0 = 0b00000101011010101000000000011110; //bjorlams filter (has bit 15 set)
+
+
+
+    //uint32_t my_filter3 = 0b00011000101111000000000000011110; //alduin filter (maybe all dragons)
+
+  //uint32_t my_filter5 = 0b00011000101111000000000000101001;//kLineOfSight = 41,
+    
+  //uint32_t my_filter5 = 0b00011000101111000000000000100111;//39 - camerapick //collides with player
+
+    //                    0b00000110010010100000000000011110 -- player's collision after vampirism is cured
+
+    //uint32_t my_filter9 = 0b00000000000010010000000000000110; //projectile filter, used for combat-like raycasting, filters player
+
 
     uint32_t my_filter1 = 0b00000000000010010000000000011110; //player filter //kCharController = 30,
     uint32_t my_filter2 = 0b00000000000010010000000000001110; //filter without invisible zones, that doesnt work on bjorlam //kTrap = 14,
-
-    uint32_t my_filter3 = 0b00011000101111000000000000011110; //alduin filter (maybe all dragons)
-
-  //uint32_t my_filter5 = 0b00011000101111000000000000101001;//kLineOfSight = 41,
     uint32_t my_filter5 = 0b00000000000010010000000000000110;//kProjectile = 6, (may be the best?)
-  //uint32_t my_filter5 = 0b00011000101111000000000000100111;//39 - camerapick //collides with player
 
+
+    uint32_t get_player_projectile_filter()
+    {
+        return my_filter5;
+    }
     
+    void update_player_collision_groups()
+    {
+        auto player = RE::PlayerCharacter::GetSingleton();
+        RE::CFilter cFilter_info{};
+        player->GetCollisionFilterInfo(cFilter_info);
 
+        auto new_group = cFilter_info.filter & 0xFFFF0000;
 
-    RE::COL_LAYER test_layer1234567890; //shortcut
+        //remove old group
+        my_filter1 = my_filter1 & 0x0000FFFF;
+        my_filter2 = my_filter2 & 0x0000FFFF;
+        my_filter5 = my_filter5 & 0x0000FFFF;
+
+        //add new group
+        my_filter1 += new_group;
+        my_filter2 += new_group;
+        my_filter5 += new_group;
+    }
+
 
 
     RayCastResult RayCast(RE::NiPoint3 rayStart, RE::NiPoint3 rayDir, float maxDist,
@@ -15302,7 +16557,7 @@ namespace MiscThings {
                     result = "[Puzzle door] Ancient Nordic Door";
                 }
 
-                if (model.find("Wheel02") != std::string::npos)
+                if (model.find("PuzzleDoor") != std::string::npos && model.find("Wheel0") != std::string::npos)
                 {
                     result = "[Puzzle door] Ancient Nordic Door";
                 }
@@ -15389,6 +16644,8 @@ namespace MiscThings {
 
         case (0x402a74b): //apocrypha book1 zone 3 gate
         case (0x403363f): //apocrypha book1 zone 3 gate
+
+        case (0x401ad2b): //vahloks tomb, fire gate
             return "";
 
         case (0xf5b03): //hermaeus mora after ogma infinium pickup
@@ -15708,6 +16965,91 @@ namespace MiscThings {
 
             switch (object->formID)
             {
+            case (0xab335): //skuldafn gate
+            {
+                auto handle = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0xab33c); //lever
+
+                if (handle)
+                {
+                    if (!MiscThings::is_object_in_the_list(handle))
+                    {
+                        auto temp_result = MiscThings::insert_object_into_list_and_get_info(handle);
+                        if (temp_result != "")
+                            send_random_context("You see: " + temp_result, false);
+                    }
+                }
+                break;
+            }
+
+
+            case (0x4032731): //book5 zone3 gates2
+            {
+                auto handle = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4032746); //scrye
+
+                if (handle)
+                {
+                    if (!MiscThings::is_object_in_the_list(handle))
+                    {
+                        auto temp_result = MiscThings::insert_object_into_list_and_get_info(handle);
+                        if (temp_result != "")
+                            send_random_context("You see: " + temp_result, false);
+                    }
+                }
+                break;
+            }
+
+
+            case (0x4032730): //book5 zone3 gates1
+            {
+                auto handle = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x403273b); //scrye
+
+                if (handle)
+                {
+                    if (!MiscThings::is_object_in_the_list(handle))
+                    {
+                        auto temp_result = MiscThings::insert_object_into_list_and_get_info(handle);
+                        if (temp_result != "")
+                            send_random_context("You see: " + temp_result, false);
+                    }
+                }
+                break;
+            }
+
+
+
+
+            case (0x4037253):
+            {
+                auto handle = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x403cf40); //scrye
+
+                if (handle)
+                {
+                    if (!MiscThings::is_object_in_the_list(handle))
+                    {
+                        auto temp_result = MiscThings::insert_object_into_list_and_get_info(handle);
+                        if (temp_result != "")
+                            send_random_context("You see: " + temp_result, false);
+                    }
+                }
+                break;
+            }
+
+            case (0x4024e9b):
+            {
+                auto handle = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4024e9d); //handle
+
+                if (handle)
+                {
+                    if (!MiscThings::is_object_in_the_list(handle))
+                    {
+                        auto temp_result = MiscThings::insert_object_into_list_and_get_info(handle);
+                        if (temp_result != "")
+                            send_random_context("You see: " + temp_result, false);
+                    }
+                }
+                break;
+            }
+
 
             case (0xa5bfb): //geirmund hall gate with pillars
             {
@@ -16697,6 +18039,27 @@ namespace MiscThings {
             return -1;
 
 
+        
+
+        if (activator->formID == 0x4017377 || activator->formID == 0x4017378 || activator->formID == 0x4017379)
+        {
+            auto object_p = General::Script::GetObject(activator, "DLC1DunStatueHitSCRIPT");
+            if (object_p)
+            {
+                std::string state = "";
+                state = object_p->currentState;
+
+                if (state == "BeenCorrectlyHit")
+                    return 0;
+                else
+                    return 1;
+
+
+            }
+        }
+
+
+
         if (activator->formID == 0x27acc)//sovngarde portal
         {
             auto object_p = General::Script::GetObject(activator, "FXSkuldafnPortal");
@@ -16833,7 +18196,7 @@ namespace MiscThings {
         //
         object_p = General::Script::GetObject(activator, "DLC2dunBookLevel4BendControl");
 
-        if (object_p)
+        if (object_p || activator->formID == 0x4030e6d) //book4 end pass, has no script, controlled by some bullshit small zones
         {
 
             auto activator_3d = activator->Get3D();
@@ -16937,6 +18300,11 @@ namespace MiscThings {
                 result = 0;
             else
                 result = 1;
+
+            if (activator->parentCell && activator->parentCell->formID == 0x40142ee) //dlc2 kolbjorn inverted doors
+                result = !result;
+
+
         }
 
 
@@ -17695,6 +19063,19 @@ namespace MiscThings {
         }
 
 
+        object_p = General::Script::GetObject(trap, "DLC2ToldarsTombPuzzlePlateSCRIPT"); //dlc1 snow elf waypoints
+
+        if (object_p)
+        {
+            std::string state = "";
+            state = object_p->currentState;
+
+            if (state == "Suspended")
+                result = 23;
+
+        }
+
+
 
 
         return result;
@@ -17812,7 +19193,22 @@ namespace MiscThings {
             return "";
 
 
-        if (object->GetBaseObject()->formID == 0x1ba5a)
+
+        auto base_obj = object->GetBaseObject();
+
+        if (base_obj->formID == 0x4029ee8) //apocrypha scrye
+        {
+            auto activation = MiscThings::two_state_activator_state(object);
+
+            if (activation == 0)
+                return "[Closed]";
+
+            //if (activation == 1)
+            //    return "[Open]";
+        }
+
+
+        if (base_obj->formID == 0x1ba5a)
         {
             //dwebutton
             if (MiscThings::two_state_activator_state(object) == 1)
@@ -17969,6 +19365,16 @@ namespace MiscThings {
         case (0x9f850):
             return "[Big]";
 
+        case (0x4017377):
+        case (0x4017378):
+        case (0x4017379):
+        {
+            if (MiscThings::two_state_activator_state(object) == 0)
+                return " (activated)";
+
+            break;
+        }
+
 
         //dlc1 moondial crest slots
         case (0x20116cb):
@@ -17990,7 +19396,7 @@ namespace MiscThings {
 
             return "[Crescent]" + filled;
         }
-            
+
         case (0x20116c9):
         {
             object_p = General::Script::GetObject(object, "DLC1VCMoondialTileScript");
@@ -18030,9 +19436,28 @@ namespace MiscThings {
 
             return "[Half-moon]" + filled;
         }
-            
 
-        //labyrinthian ghosts
+            //dawnstar dark brotherhood ghosts
+        case (0xe98a4):
+        case (0xe98a5):
+        case (0xe98a9):
+        case (0xe98aa):
+        case (0xe98ac):
+        case (0xe98ad):
+        case (0xe98b1):
+        case (0xe98b2):
+        case (0xe98b3):
+        case (0xe98b4):
+        case (0xe98b5):
+        case (0xe98b6):
+
+
+        case (0x1a2d2): //twilight sepulcher ghosts
+        case (0x5ba48):
+        case (0x5ba69):
+        case (0x5bbfd):
+
+            //labyrinthian ghosts
         case (0xbbdbf):
         case (0xbbdc1):
         case (0xbbdc0):
@@ -18040,14 +19465,14 @@ namespace MiscThings {
         case (0xbbdc3):
         case (0xd07dc):
 
-        //dlc1 shrine ghosts
+            //dlc1 shrine ghosts
         case (0x200a8bf):
         case (0x200a8af):
         case (0x200a8bb):
         case (0x2002b48):
         case (0x200a8b8):
 
-        //avanchenzel orange ghosts
+            //avanchenzel orange ghosts
         case (0x2ba33):
         case (0x56555):
         case (0x2ba30):
@@ -18055,7 +19480,7 @@ namespace MiscThings {
             return "[Ghost]";
 
 
-        //saartal puzzle pillar 2 pillars
+            //saartal puzzle pillar 2 pillars
         case (0x725b9):
             return "First";
         case (0x725b8):
@@ -18777,7 +20202,7 @@ namespace MiscThings {
                         //OBJECTIVES MIDDLE
 
 
-                        for (int i = 0; i < 20; i++)
+                        for (int i = 0; i < 60; i++)
                         {
                             std::string path = "_root.HUDMovieBaseInstance.QuestUpdateBaseInstance.objective" + std::to_string(i) + ".ObjectiveTextFieldInstance.TextFieldInstance.text";
                             if (menu->uiMovie->GetVariable(&var1, path.c_str()))
@@ -18942,6 +20367,11 @@ namespace MiscThings {
                                                             if (result_string != "Autosaving..." && result_string != "Quicksaving..." && result_string != "Quickloading...")// && result_string.find("is too powerful") == std::string::npos)
                                                             {
                                                                 bool silent = false;
+
+                                                                if (result_string == "You must have a fishing rod equipped to use this.")
+                                                                {
+                                                                    result_string += " (try looking around, maybe there is a fishing rod nearby. If there isnt, you can try to buy one from traders in towns)";
+                                                                }
 
                                                                 if (result_string.find(" too powerful ") != std::string::npos || result_string.find(" poisoned.") != std::string::npos)
                                                                     if (MiscThings::coinflip())
@@ -19351,6 +20781,12 @@ namespace MiscThings {
                     std::string model = furniture->GetModel();
                     if (model.find("DweFacadeLiftLeverLoad") != std::string::npos)
                     {
+                        switch (object->formID)
+                        {
+                        case (0x2c79a):
+                            return result; //xrib cave. lever oriented wrong way
+                        }
+
                         RE::NiPoint3 base_shift_vector = { 0.0f, -600.0f, 60.0f };
                         RE::NiPoint3 rotated_shift_vector = rotate_vector_by_angles(base_shift_vector, object_angles);
                         result = rotated_shift_vector;
@@ -19556,6 +20992,18 @@ namespace MiscThings {
 
                 switch (object->formID)
                 {
+                case (0x4017377): //vahlok tomb glowing stones (red/blue/green)
+                case (0x4017378):
+                case (0x4017379):
+                {
+                    RE::NiPoint3 object_angles = object->data.angle;
+                    RE::NiPoint3 base_shift_vector = { 0.0f, 0.0f, 90.0f };
+                    //RE::NiPoint3 rotated_shift_vector = rotate_vector_by_angles(base_shift_vector, object_angles);
+                    result = base_shift_vector;
+                    return result;
+                }
+
+
 
                 case (0xf4986): //fire door labyrinthian
                 {
@@ -20030,7 +21478,7 @@ namespace MiscThings {
                             return  rotated_shift_vector;
                         }
 
-                        if (model.find("PuzzleDoorKeyHole") != std::string::npos) //exclude markers. for some reason their model state is not 0 even though the model doesnt exist
+                        if (model.find("PuzzleDoorKeyHole") != std::string::npos || model.find("PuzzleDoorDLC2Amethyst") != std::string::npos) //exclude markers. for some reason their model state is not 0 even though the model doesnt exist
                         {
                             RE::NiPoint3 base_shift_vector = { -10.0f, 0.0f, 80.0f };
                             RE::NiPoint3 rotated_shift_vector = rotate_vector_by_angles(base_shift_vector, object_angles);
@@ -20736,7 +22184,7 @@ namespace MiscThings {
         {
             //<Alias=RiverwoodFriend>
             
-            auto alias_end = displaytext.find(">");
+            auto alias_end = displaytext.find(">", alias_start);
             if (alias_start < alias_end)
             {
                 std::string alias_name = displaytext.substr(alias_start + shift, alias_end - alias_start - shift);
@@ -21048,7 +22496,7 @@ namespace MiscThings {
         //////////////////////////////////
         // FAKE QUESTS
 
-        if (my_quest)
+        if (my_quest && !MiscThings::is_intro() && !MiscThings::is_intro2())
         {
             if (MiscThings::get_picks_amount_int() <= 0 || MiscThings::get_player_gold() < 200)
             {
@@ -21274,6 +22722,12 @@ namespace MiscThings {
                                                 switch (the_quest->formID)
                                                 {
                                                 case (0x401a50b): //retake thirsk, 20 rieklings
+                                                {
+                                                    quests_to_have_only_one_target.insert({ the_quest->formID, true });
+                                                    break;
+                                                }
+
+                                                case (0x401810b): //unearhed, bunch of draugrs
                                                 {
                                                     quests_to_have_only_one_target.insert({ the_quest->formID, true });
                                                     break;
@@ -24721,12 +26175,36 @@ namespace MiscThings {
             case (0x20116c9):
             case (0x20116ca):
                 name = "Crest slot";
+                break;
+
+            case (0x4020413): //black book5 zone3 end choose 2 books
+                name = "Chapter 5";
+                break;
+
+            case (0x401e6d1): //black book5 zone3 end choose 2 books
+                name = "Chapter 6";
+                break;
+
+            case (0x4020471): //black book5 zone3 end choose 2 books
+                name = "Chapter 8";
+                break;
+
+            case (0x402046f): //black book5 zone3 end choose 2 books
+                name = "Chapter 7";
+                break;
             }
 
 
 
             auto base_obj = refr->GetBaseObject();
             auto base_type = base_obj->GetFormType();
+
+
+            if (MiscThings::is_fishing_supplies(base_obj)) //fishing supplies
+            {
+                name = "Fishing Supplies (interact to try fishing)";
+            }
+
 
             if (base_type == RE::FormType::Container)
             {
@@ -24911,6 +26389,8 @@ namespace MiscThings {
 
             auto base_obj = refr->GetBaseObject();
             auto base_type = base_obj->GetFormType();
+
+            
 
             if (base_type == RE::FormType::MovableStatic)
             {
@@ -25474,10 +26954,242 @@ namespace MiscThings {
     }
 
 
+    bool is_junk(RE::TESBoundObject* object, int count)
+    {
+        //only misc
+
+        if (object && object->IsBoundObject())
+        {
+            if (MiscThings::is_unique_item(object))
+                return false;
+
+            float weight = object->GetWeight() * count;
+
+            if (MiscThings::is_equipped(object) && count < 2)
+                return false;
+
+            if (weight >= 2.0f && object->formType == RE::FormType::Misc)
+            {
+                return true;
+            }
+        }
+        
+        return false;
+    }
 
 
 
-    int find_good_weapon_in_inventory()
+    std::string get_junk_list()
+    {
+        std::string result = "";
+
+        auto player = RE::PlayerCharacter::GetSingleton();
+
+        if (!player)
+            return "";
+
+        if (MiscThings::is_werewolf() || MiscThings::is_vampirelord())
+            return "";
+
+
+        if (!inventory_valid)
+            auto temp = GetInventory();
+
+        if (!inventory_valid)
+            return "";
+
+        auto p_inventory = get_p_inventory_items_list();
+
+        auto inventory = MiscThings::get_filtered_inventory();
+
+        float total_junk_weight = 0.0f;
+        float total_book_weight = 0.0f;
+
+        bool has_dragon_parts = false;
+
+        float total_ingredient_weight = 0.0f;
+
+        std::string result_junk = "";
+
+
+        for (auto inventory_entry : *p_inventory)
+        {
+            auto object = inventory_entry.second.object;
+            if (object)
+            {
+                int item_id = inventory_entry.first;
+
+                bool cant_drop = false;
+
+                if (object->IsWeapon())
+                {
+                    auto weapon = (RE::TESObjectWEAP*)object;
+
+                    cant_drop = weapon->weaponData.flags.all(RE::TESObjectWEAP::Data::Flag::kCantDrop);
+
+                }
+
+                if (object->IsKey())
+                    cant_drop = true;
+
+                auto entry = inventory.find(object);
+
+                if (entry != inventory.end() && entry->second.second.get())
+                {
+                    RE::InventoryEntryData* entry_entry = entry->second.second.get();
+
+                    if (entry_entry)
+                    {
+                        if (entry_entry->IsQuestObject())
+                        {
+                            continue;
+                        }
+                    }
+                    else
+                        cant_drop = true;
+                }
+                else
+                    cant_drop = true;
+
+
+                if (cant_drop)
+                {
+                    continue;
+                }
+                else
+                {
+                    if (object->IsWeapon())
+                    {
+                        auto weapon = (RE::TESObjectWEAP*)object;
+                        
+                        if (weapon->IsTwoHandedAxe() || weapon->IsTwoHandedSword())
+                        {
+                            if (find_best_melee_weapon() == item_id)
+                            {
+                                if (entry->second.first <= 1)
+                                {
+                                    continue;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            if (weapon->IsBow() || weapon->IsCrossbow())
+                            {
+                                if (find_best_bow() == item_id)
+                                {
+                                    if (entry->second.first <= 1)
+                                    {
+                                        continue;
+                                    }
+                                }
+
+                            }
+                            else
+                            {
+                                //onehanded
+                                if (find_best_melee_weapon() == item_id)
+                                {
+                                    if (entry->second.first <= 1)
+                                    {
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (MiscThings::is_unique_item(object))
+                        continue;
+
+                    if (MiscThings::is_fishing_rod(object))
+                        continue;
+
+                    if (MiscThings::is_pickaxe(object))
+                        continue;
+
+                    //all good. droppable, therefore sellable
+                    int count = entry->second.first;
+                    float weight = object->GetWeight() * count;
+
+
+                    if (MiscThings::is_equipped(object) && entry->second.first < 2)
+                        continue;
+
+                    if (object->formType == RE::FormType::Ingredient)
+                    {
+                        total_ingredient_weight += object->GetWeight() * entry->second.first;
+                        continue;
+                    }
+
+                    if (object->formType == RE::FormType::AlchemyItem)
+                    {
+                        continue;
+                    }
+
+
+
+
+                    if (weight >= 2.0f && !object->IsBook())
+                    {
+                        std::string amount_text = "";
+                        if (inventory_entry.second.amount > 1)
+                            amount_text = " x" + std::to_string(inventory_entry.second.amount);
+
+                        result_junk += inventory_entry.second.name + amount_text + "; ";
+                        total_junk_weight += weight;
+                    }
+
+
+
+                    if (object->IsBook())
+                    {
+                        total_book_weight += object->GetWeight();
+                    }
+
+                    if (object->formID == 0x3ada4 || object->formID == 0x3ada3)
+                        has_dragon_parts = true; //dragon bones and scales. need this to advice about alchemist
+
+                }
+            }
+        }
+
+        if (total_junk_weight > 50.0f && result_junk != "")
+        {
+            std::string start_text = "Items that might be good to sell/drop (this recommendation may be incorrect. use at your own risk)";
+            if (has_dragon_parts)
+                start_text += "(Only alchemists and general traders buy dragon scales and bones)";
+            result = start_text + ": " + result_junk;
+        }
+
+        if (total_book_weight > 20.0f)
+        {
+            std::string also = "";
+
+            if (result != "")
+                also = "also ";
+            result += "You " + also + "have a lot of books that weight total of " + std::to_string((int)total_book_weight) + ". Might be wise to get rid of them/sell them/store them (if you have a place where to store them)";
+        }
+
+        if (total_ingredient_weight > 20.0f)
+        {
+            std::string also = "";
+
+            if (result != "")
+                also = "also ";
+            result += "You " + also + "have a lot of alchemy ingredients that weight total of " + std::to_string((int)total_ingredient_weight) + ". Might be wise to go craft some potions or sell them (if you can find alchemy table)";
+        }
+
+
+
+        return result;
+    }
+
+
+
+
+
+    int find_good_weapon_in_inventory(int type)
     {
         //returns index to equip with use_inventory item
 
@@ -25574,11 +27286,16 @@ namespace MiscThings {
         float player_twohanded_skill = player->GetBaseActorValue(RE::ActorValue::kTwoHanded);
         float player_bow_skill = player->GetBaseActorValue(RE::ActorValue::kArchery);
 
+        player_onehanded_skill *= player_onehanded_skill;
+        player_twohanded_skill *= player_twohanded_skill;
+        player_bow_skill *= player_bow_skill;
+
+
         float sum = player_onehanded_skill + player_twohanded_skill + player_bow_skill;
 
         float chance_onehanded = player_onehanded_skill / sum;
         float chance_twohanded = player_twohanded_skill / sum + chance_onehanded;
-        //float chance_bow = player_bow_skill / sum + ;
+        //float chance_bow = player_bow_skill / sum + chance_twohanded;
 
         float chance = (float)std::rand() / RAND_MAX;
 
@@ -25589,7 +27306,7 @@ namespace MiscThings {
                 return best_twohanded;
             else
                 if (best_bow > -1)
-                    return -1;
+                    return best_bow;
 
         return -1;
     }
@@ -25996,8 +27713,16 @@ namespace MiscThings {
 
                         float new_weapon_damage = new_weapon->GetAttackDamage();
 
+                        if (MiscThings::is_unique_item(new_weapon))
+                            new_weapon_damage *= 1.1f;
+
+                        auto speed = new_weapon->GetSpeed();
+                        if (speed > 0.0f)
+                            new_weapon_damage *= speed;
+
                         if (new_weapon->IsTwoHandedAxe() || new_weapon->IsTwoHandedSword() || new_weapon->IsBow() || new_weapon->IsCrossbow())
                             new_weapon_damage /= 2.0f;
+
 
 
                         float current_weapon_damage = 0.0f;
@@ -26025,6 +27750,13 @@ namespace MiscThings {
                             if (current_weapon->IsWeapon())
                             {
                                 current_weapon_damage = current_weapon->GetAttackDamage();
+
+                                if (MiscThings::is_unique_item(current_weapon))
+                                    current_weapon_damage *= 1.1f;
+
+                                auto speed = current_weapon->GetSpeed();
+                                if (speed > 0.0f)
+                                    current_weapon_damage *= speed;
 
                                 if (current_weapon->IsTwoHandedAxe() || current_weapon->IsTwoHandedSword() || current_weapon->IsBow() || current_weapon->IsCrossbow())
                                     current_weapon_damage /= 2.0f;
@@ -26601,10 +28333,10 @@ namespace MiscThings {
             auto actor_process = player->currentProcess;
             auto equipped_list = actor_process->equippedObjects;
 
-            if (!equipped_list[1])
+            if (!equipped_list[1] || MiscThings::is_fishing_rod(equipped_list[1]))
                 return right_slot; //right hand
 
-            if (!equipped_list[0])
+            if (!equipped_list[0] || MiscThings::is_fishing_rod(equipped_list[0]))
                 return left_slot; //left hand
 
             //both are busy
@@ -27746,21 +29478,33 @@ namespace MiscThings {
                     if (value > 500.0f)
                     {
                         do_force = true;
-
                         valuable_text = "It is valuable; ";
                     }
 
                     if (MiscThings::is_equipped(item))
                     {
                         do_force = true;
-                        std::string name = item->GetName();
                         equipped_text = "It is currently equipped; ";
                     }
 
                     if (MiscThings::is_unique_item(item))
                     {
+                        do_force = true;
                         unique_text = "It is a unique or legendary item; ";
                     }
+                    
+                    if (MiscThings::is_fishing_rod(item) && MiscThings::get_fishing_rod_amount() == 1)
+                    {
+                        do_force = true;
+                        unique_text = "It is your last fishing rod, you cannot fish without it; ";
+                    }
+
+                    if (MiscThings::is_pickaxe(item) && MiscThings::get_pickaxe_amount() == 1)
+                    {
+                        do_force = true;
+                        unique_text = "It is your last pickaxe, you cannot mine ores without it; ";
+                    }
+
 
                     if (valuable_text != "" || equipped_text != "" || unique_text != "")
                     {
@@ -28503,6 +30247,14 @@ namespace MiscThings {
                             }
 
 
+                            if (deployed_special_weapon_recently() && object->IsWeapon())
+                            {
+                                result.first = false;
+                                result.second = "You are currently using " + get_special_weapon_name() + " and its stuck in your hands for a while... try again later";
+                                return result;
+                            }
+
+
 
 
                             if (!probe_mode && object->IsWeapon() && is_casting_ult())
@@ -28532,6 +30284,16 @@ namespace MiscThings {
 
                             if (object->IsWeapon())
                             {
+
+                                if (deployed_special_weapon_recently())
+                                {
+                                    result.first = false;
+                                    result.second = "You are currently using " + get_special_weapon_name() + " and its stuck in your hands for a while... try again later";
+                                    return result;
+                                }
+
+
+
                                 auto slot = get_free_slot(true, false);
 
                                 bool making_dualwield = false;
@@ -28673,6 +30435,18 @@ namespace MiscThings {
                                     result.second = "You are concentrated on casting Master-level spell... Wait a little before equipping items";
                                     return result;
                                 }
+
+
+                                if (object->IsAmmo())
+                                {
+                                    if (deployed_special_weapon_recently())
+                                    {
+                                        result.first = false;
+                                        result.second = "You are currently using " + get_special_weapon_name() + " and its stuck in your hands for a while... try again later";
+                                        return result;
+                                    }
+                                }
+
 
 
                                 auto entry = inventory.find(object);
@@ -30474,6 +32248,74 @@ namespace MiscThings {
     }
 
 
+    bool has_dualcast_perk_for_spell(RE::SpellItem* spell)
+    {
+        if (spell)
+        {
+            if (spell->formType == RE::FormType::Spell)
+            {
+                auto player = RE::PlayerCharacter::GetSingleton();
+
+                for (auto effect : spell->effects)
+                {
+                    if (effect && effect->baseEffect)
+                    {
+                        switch (effect->baseEffect->data.associatedSkill)
+                        {
+                        case (RE::ActorValue::kDestruction):
+                        {
+                            auto perk = (RE::BGSPerk*)RE::TESForm::LookupByID(0x153cf);
+                            if (perk)
+                                return player->HasPerk(perk);
+                            break;
+                        }
+
+
+                        case (RE::ActorValue::kAlteration):
+                        {
+                            auto perk = (RE::BGSPerk*)RE::TESForm::LookupByID(0x153cd);
+                            if (perk)
+                                return player->HasPerk(perk);
+                            break;
+                        }
+
+
+                        case (RE::ActorValue::kIllusion):
+                        {
+                            auto perk = (RE::BGSPerk*)RE::TESForm::LookupByID(0x153d0);
+                            if (perk)
+                                return player->HasPerk(perk);
+                            break;
+                        }
+
+                        case (RE::ActorValue::kRestoration):
+                        {
+                            auto perk = (RE::BGSPerk*)RE::TESForm::LookupByID(0x153d1);
+                            if (perk)
+                                return player->HasPerk(perk);
+                            break;
+                        }
+
+                        case (RE::ActorValue::kConjuration):
+                        {
+                            auto perk = (RE::BGSPerk*)RE::TESForm::LookupByID(0x153ce);
+                            if (perk)
+                                return player->HasPerk(perk);
+                            break;
+                        }
+                        }
+
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+
+
+
 
     std::string get_casting_perk_info(RE::SpellItem* spell)
     {
@@ -30697,7 +32539,109 @@ namespace MiscThings {
     }
 
 
+    bool is_vampire()
+    {
+        auto vampiric_drain = (RE::SpellItem*)RE::TESForm::LookupByID(0x8D5BF);
+        if (vampiric_drain && MiscThings::player_has_spell(vampiric_drain))
+            return true;
 
+        vampiric_drain = (RE::SpellItem*)RE::TESForm::LookupByID(0x8D5C0);
+        if (vampiric_drain && MiscThings::player_has_spell(vampiric_drain))
+            return true;
+
+        vampiric_drain = (RE::SpellItem*)RE::TESForm::LookupByID(0x8D5C1);
+        if (vampiric_drain && MiscThings::player_has_spell(vampiric_drain))
+            return true;
+
+        vampiric_drain = (RE::SpellItem*)RE::TESForm::LookupByID(0x8D5C2);
+        if (vampiric_drain && MiscThings::player_has_spell(vampiric_drain))
+            return true;
+
+        return false;
+    }
+
+
+    bool has_vampire_sun_debuff()
+    {
+        auto debuff = (RE::SpellItem*)RE::TESForm::LookupByID(0xc1e8b); //1
+        if (debuff && MiscThings::player_has_spell(debuff))
+        {
+            bool any_effect_active = false;
+            for (auto& effect : debuff->effects)
+            {
+                if (effect)
+                {
+                    if (!effect->conditions || MiscThings::recursive_quest_condition_check(effect->conditions.head, nullptr, nullptr))
+                    {
+                        any_effect_active = true;
+                        break;
+                    }
+                }
+            }
+            if (any_effect_active)
+                return true;
+        }
+
+
+        debuff = (RE::SpellItem*)RE::TESForm::LookupByID(0xed09a); //2
+        if (debuff && MiscThings::player_has_spell(debuff))
+        {
+            bool any_effect_active = false;
+            for (auto& effect : debuff->effects)
+            {
+                if (effect)
+                {
+                    if (!effect->conditions || MiscThings::recursive_quest_condition_check(effect->conditions.head, nullptr, nullptr))
+                    {
+                        any_effect_active = true;
+                        break;
+                    }
+                }
+            }
+            if (any_effect_active)
+                return true;
+        }
+
+        debuff = (RE::SpellItem*)RE::TESForm::LookupByID(0xed09b); //3
+        if (debuff && MiscThings::player_has_spell(debuff))
+        {
+            bool any_effect_active = false;
+            for (auto& effect : debuff->effects)
+            {
+                if (effect)
+                {
+                    if (!effect->conditions || MiscThings::recursive_quest_condition_check(effect->conditions.head, nullptr, nullptr))
+                    {
+                        any_effect_active = true;
+                        break;
+                    }
+                }
+            }
+            if (any_effect_active)
+                return true;
+        }
+
+        debuff = (RE::SpellItem*)RE::TESForm::LookupByID(0xed09c); //4
+        if (debuff && MiscThings::player_has_spell(debuff))
+        {
+            bool any_effect_active = false;
+            for (auto& effect : debuff->effects)
+            {
+                if (effect)
+                {
+                    if (!effect->conditions || MiscThings::recursive_quest_condition_check(effect->conditions.head, nullptr, nullptr))
+                    {
+                        any_effect_active = true;
+                        break;
+                    }
+                }
+            }
+            if (any_effect_active)
+                return true;
+        }
+
+        return false;
+    }
 
 
     std::pair<bool, std::string> get_available_spells()
@@ -30720,6 +32664,7 @@ namespace MiscThings {
             std::string* restoration = nullptr;
             std::string* alteration = nullptr;
             std::string* illusion = nullptr;
+            std::string* conjuration = nullptr;
 
             //std::string* shouts; //this doesnt work for shouts
             std::string* ults;
@@ -30733,7 +32678,7 @@ namespace MiscThings {
 
             RE::BSContainer::ForEachResult Visit(RE::SpellItem* a_spell) override {
                 //if (active_spells && passive_effects && shouts && player)// && player->HasSpell(a_spell))
-                if (active_spells && destruction && restoration && alteration && illusion && passive_effects && player && !is_werewolf_banned_spell(a_spell) && !is_vampirelord_banned_spell(a_spell))
+                if (active_spells && destruction && restoration && alteration && illusion && conjuration && passive_effects && player && !is_werewolf_banned_spell(a_spell) && !is_vampirelord_banned_spell(a_spell))
                 {
                     std::string name = a_spell->GetFullName();
                     std::string description = "";
@@ -30824,6 +32769,14 @@ namespace MiscThings {
                                 case(0xc44c5):
                                 case(0xc44c6):
                                     *illusion += "[id " + std::to_string(i) + "]" + rank_info + range_info + equip_info + cost_info + " " + name + " - " + description + "\n";
+                                    break;
+
+                                case(0xc44bc):
+                                case(0xc44bb):
+                                case(0xc44bd):
+                                case(0xc44be):
+                                case(0xf2ca7):
+                                    *conjuration += "[id " + std::to_string(i) + "]" + rank_info + range_info + equip_info + cost_info + " " + name + " - " + description + "\n";
                                     break;
 
                                 default:
@@ -30923,7 +32876,7 @@ namespace MiscThings {
         std::string restoration = "";
         std::string alteration = "";
         std::string illusion = "";
-
+        std::string conjuration = "";
 
         std::string passive_effects = "";
         std::string shouts = "";
@@ -30935,6 +32888,7 @@ namespace MiscThings {
         visitor.restoration = &restoration;
         visitor.alteration = &alteration;
         visitor.illusion = &illusion;
+        visitor.conjuration = &conjuration;
         visitor.passive_effects = &passive_effects;
         //visitor.shouts = &shouts;
         visitor.ults = &ults;
@@ -31045,7 +32999,7 @@ namespace MiscThings {
     */
 
 
-        if (destruction != "" || restoration != "" || alteration != "" || illusion != "" || active_spells != "")
+        if (destruction != "" || restoration != "" || alteration != "" || illusion != "" || active_spells != "" || conjuration != "")
         {
             result_text += "Active spells:\n\n";
 
@@ -31054,6 +33008,9 @@ namespace MiscThings {
 
             if (restoration != "")
                 result_text += "Restoration:\n" + restoration + "\n";
+
+            if (conjuration != "")
+                result_text += "Conjuration:\n" + conjuration + "\n";
 
             if (alteration != "")
                 result_text += "Alteration:\n" + alteration + "\n";
@@ -32430,6 +34387,13 @@ namespace MiscThings {
                                 }
 
 
+                                if (deployed_special_weapon_recently())
+                                {
+                                    result.first = false;
+                                    result.second = "You are currently using " + get_special_weapon_name() + " and its stuck in your hands for a while... try again later";
+                                    return result;
+                                }
+
                                 if (cast_spell_recently())
                                 {
                                     result.first = false;
@@ -32438,18 +34402,88 @@ namespace MiscThings {
                                 }
 
                                 equip_manager->EquipSpell(player_actor, spell, slot);
+
+
+                                if (MiscThings::has_dualcast_perk_for_spell(spell) && !MiscThings::is_werewolf() && !MiscThings::is_vampirelord())
+                                {
+                                    bool dualcasting_no_mana = MiscThings::get_player_mana() < WalkerProcessor::get_spell_cost(right_hand) * 2.8f;
+
+                                    if (!dualcasting_no_mana && !is_self_healing_spell(!right_hand))
+                                    {
+                                        //have mana for dualcast, not self healing spell in other hand. equip this spell in both hands with some chance
+
+                                        if (MiscThings::coinflip())
+                                        {
+                                            auto other_slot = (RE::BGSEquipSlot*)RE::TESForm::LookupByID(0x00013F42);
+
+                                            if (!right_hand)
+                                            {
+                                                other_slot = (RE::BGSEquipSlot*)RE::TESForm::LookupByID(0x00013F42);
+                                            }
+                                            else
+                                            {
+                                                other_slot = (RE::BGSEquipSlot*)RE::TESForm::LookupByID(0x00013F43);
+                                            }
+
+                                            equip_manager->EquipSpell(player_actor, spell, other_slot);
+                                        }
+                                    }
+                                }
+
+
+
+
+
+
                                 WalkerProcessor::reset_attacking_inanimate_object_time();
                             }
                             else
                             {
                                 //already equipped
-                                ;
+                                
+                                if (deployed_special_weapon_recently())
+                                {
+                                    result.first = false;
+                                    result.second = "You are currently using " + get_special_weapon_name() + " and its stuck in your hands for a while... try again later";
+                                    return result;
+                                }
+
+
                                 if (cast_spell_recently())
                                 {
                                     result.first = false;
                                     result.second = "You are still casting previous spell! Wait a little before casting new spell";
                                     return result;
                                 }
+
+
+
+                                if (MiscThings::has_dualcast_perk_for_spell(spell) && !MiscThings::is_werewolf() && !MiscThings::is_vampirelord())
+                                {
+                                    bool dualcasting_no_mana = MiscThings::get_player_mana() < WalkerProcessor::get_spell_cost(right_hand) * 2.8f;
+
+                                    if (!dualcasting_no_mana && !is_self_healing_spell(!right_hand))
+                                    {
+                                        //have mana for dualcast, not self healing spell in other hand. equip this spell in both hands with some chance
+
+                                        if (MiscThings::coinflip())
+                                        {
+                                            auto other_slot = (RE::BGSEquipSlot*)RE::TESForm::LookupByID(0x00013F42);
+
+                                            if (!right_hand)
+                                            {
+                                                other_slot = (RE::BGSEquipSlot*)RE::TESForm::LookupByID(0x00013F42);
+                                            }
+                                            else
+                                            {
+                                                other_slot = (RE::BGSEquipSlot*)RE::TESForm::LookupByID(0x00013F43);
+                                            }
+
+                                            equip_manager->EquipSpell(player_actor, spell, other_slot);
+                                        }
+                                    }
+                                }
+
                             }
 
 
@@ -32592,16 +34626,20 @@ namespace MiscThings {
                                 }
                                 if (unlocked_words > 0)
                                 {
-
                                     auto capture_dragon_quest = (RE::TESQuest*)RE::TESForm::LookupByEditorID("MQ301");
                                     if (capture_dragon_quest && capture_dragon_quest->GetCurrentStageID() == 150)
                                     {
-                                        auto call_dragon = (RE::TESShout*)RE::TESForm::LookupByID(0x46B8c);
-                                        if (shout == call_dragon)
+                                        //auto call_dragon = (RE::TESShout*)RE::TESForm::LookupByID(0x46B8c);
+                                        if (shout->formID == 0x46B8c)
                                         {
-                                            result.first = false;
-                                            result.second = "You already called the dragon. No need to do it again yet";
-                                            return result;
+                                            //now test if odahviing is actually enabled
+                                            auto odahviing = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x45921);
+                                            if (odahviing && !odahviing->IsDisabled())
+                                            {
+                                                result.first = false;
+                                                result.second = "You already called the dragon. No need to do it again yet";
+                                                return result;
+                                            }
                                         }
                                     }
 
@@ -33019,6 +35057,13 @@ namespace MiscThings {
         }
 
 
+        if (deployed_special_weapon_recently())
+        {
+            result.first = false;
+            result.second = "You are currently using " + get_special_weapon_name() + " and its stuck in your hands for a while... try again later";
+            return result;
+        }
+
 
         if (std::size(spells) <= 0)
         {
@@ -33207,34 +35252,34 @@ namespace MiscThings {
                             equip_manager->EquipSpell(player_actor, spell, slot);
 
 
-                            bool dualcasting_no_mana = MiscThings::get_player_mana() < WalkerProcessor::get_spell_cost(right_hand) * 2.8f;
-
-
-                            if (!dualcasting_no_mana && !is_self_healing_spell(!right_hand) && has_spell_equipped(!right_hand))
+                            if (MiscThings::has_dualcast_perk_for_spell(spell) && !MiscThings::is_werewolf() && !MiscThings::is_vampirelord())
                             {
-                                //have mana for dualcast, other hand is also spell and its not self healing spell in other hand. equip this spell in both hands with some chance
-                                
-                                if (MiscThings::coinflip())
+                                bool dualcasting_no_mana = MiscThings::get_player_mana() < WalkerProcessor::get_spell_cost(right_hand) * 2.8f;
+
+                                if (!dualcasting_no_mana && !is_self_healing_spell(!right_hand))
                                 {
-                                    auto other_slot = (RE::BGSEquipSlot*)RE::TESForm::LookupByID(0x00013F42);
+                                    //have mana for dualcast, not self healing spell in other hand. equip this spell in both hands with some chance
 
-                                    if (!right_hand)
+                                    if (MiscThings::coinflip())
                                     {
-                                        other_slot = (RE::BGSEquipSlot*)RE::TESForm::LookupByID(0x00013F42);
+                                        auto other_slot = (RE::BGSEquipSlot*)RE::TESForm::LookupByID(0x00013F42);
+
+                                        if (!right_hand)
+                                        {
+                                            other_slot = (RE::BGSEquipSlot*)RE::TESForm::LookupByID(0x00013F42);
+                                        }
+                                        else
+                                        {
+                                            other_slot = (RE::BGSEquipSlot*)RE::TESForm::LookupByID(0x00013F43);
+                                        }
+
+                                        equip_manager->EquipSpell(player_actor, spell, other_slot);
+
+                                        equip_hand = " in both hands";
                                     }
-                                    else
-                                    {
-                                        other_slot = (RE::BGSEquipSlot*)RE::TESForm::LookupByID(0x00013F43);
-                                    }
-
-
-                                    equip_manager->EquipSpell(player_actor, spell, other_slot);
-
-                                    equip_hand = " in both hands";
                                 }
-
-
                             }
+                            
 
 
                             if (slot_id == 0x00013f45)
@@ -33402,7 +35447,7 @@ namespace MiscThings {
     bool helgen_bride_destroyed()
     {
         bool result = false;
-        auto threshold_quest = (RE::TESQuest*)RE::TESForm::LookupByEditorID("MQ101");
+        static auto threshold_quest = (RE::TESQuest*)RE::TESForm::LookupByEditorID("MQ101");
         if (threshold_quest)
             if (threshold_quest->GetCurrentStageID() >= 500)
                 result = true;
@@ -33413,13 +35458,23 @@ namespace MiscThings {
 
     bool is_intro_quest_only()
     {
-        auto threshold_quest = (RE::TESQuest*)RE::TESForm::LookupByEditorID("MQ101");
+        static auto threshold_quest = (RE::TESQuest*)RE::TESForm::LookupByEditorID("MQ101");
         if (threshold_quest)
             if (threshold_quest->GetCurrentStageID() < 160)
                 return true;
 
 
         return false;
+    }
+
+
+    bool is_outro()
+    {
+        static auto threshold_quest = (RE::TESQuest*)RE::TESForm::LookupByEditorID("MQ306");
+        if (threshold_quest)
+            return threshold_quest->currentStage >= 5;
+        else
+            return false;
     }
 
 
@@ -33434,7 +35489,7 @@ namespace MiscThings {
         bool can_fight = control_map->enabledControls.any(RE::UserEvents::USER_EVENT_FLAG::kFighting);
 
         bool result = false;
-        auto threshold_quest = (RE::TESQuest*)RE::TESForm::LookupByEditorID("MQ101");
+        static auto threshold_quest = (RE::TESQuest*)RE::TESForm::LookupByEditorID("MQ101");
         if (threshold_quest)
             if (threshold_quest->GetCurrentStageID() < 160)
                 result = true;
@@ -33457,7 +35512,7 @@ namespace MiscThings {
 
 
         bool result = false;
-        auto threshold_quest = (RE::TESQuest*)RE::TESForm::LookupByEditorID("MQ101");
+        static auto threshold_quest = (RE::TESQuest*)RE::TESForm::LookupByEditorID("MQ101");
         if (threshold_quest)
             if (threshold_quest->GetCurrentStageID() < 200)
                 result = true;
@@ -33470,7 +35525,7 @@ namespace MiscThings {
     bool escaped_helgen()
     {
         bool result = false;
-        auto threshold_quest = (RE::TESQuest*)RE::TESForm::LookupByEditorID("MQ101");
+        static auto threshold_quest = (RE::TESQuest*)RE::TESForm::LookupByEditorID("MQ101");
         if (threshold_quest)
             if (threshold_quest->GetCurrentStageID() >= 760)
                 result = true;
@@ -33572,17 +35627,14 @@ namespace MiscThings {
             //   if (actor_refr->actorState2.reanimating)
             //        return false;
 
+            //dragon race
+            if ((actor_refr->race->formID == 0x12e82 || actor_refr->race->formID == 0xe7713) && !is_fighting_dragons_allowed())
+                return false;
 
             if (controller)
             {
                 auto target_handle = controller->targetHandle;
                 auto target_ref = RE::TESObjectREFR::LookupByHandle(target_handle.native_handle());
-
-                //dragon race
-                if (actor_refr->race->formID == 0x12e82 && !is_fighting_dragons_allowed())
-                    return false;
-
-
 
 
                 if (target_ref && target_ref.get() == player)
@@ -33762,6 +35814,10 @@ namespace MiscThings {
 
                 if (spell->GetFormType() == RE::FormType::Spell || spell->GetFormType() == RE::FormType::Scroll)
                 {
+                    if (spell->IsHostile())
+                        return true;
+
+
                     if (spell->GetSpellType() != RE::MagicSystem::SpellType::kEnchantment)
                     {
                         auto slot_both_hands = RE::TESForm::LookupByID(0x00013F45);
@@ -34124,6 +36180,20 @@ namespace MiscThings {
                     {
                         switch (player_cell->formID)
                         {
+
+                        case (0x40142ef): //vahloks tomb
+                        {
+                            bool player_above = player_pos.y < -3805.0f && player_pos.z > -500.0f;
+                            bool object_down = a_ref->GetPositionY() < -3805.0f && a_ref->GetPositionZ() < -500.0f;
+
+                            if (player_above && object_down)
+                                return RE::BSContainer::ForEachResult::kContinue;
+
+                            break;
+                        }
+
+
+
                         case (0xa5a71): //geirmund hall
                         {
                             bool player_inside_badroom = is_inside_geirmund_hall_multilevel_room(player);
@@ -34228,10 +36298,14 @@ namespace MiscThings {
                     }
 
 
-                    if (a_ref->formID == 0x6dfa0 || a_ref->formID == 0x401c8f1)
+
+                    switch (a_ref->formID)
+                    {
+                    case (0x6dfa0):
+                    case (0x401c8f1):
                         return RE::BSContainer::ForEachResult::kContinue; //spider in avanchenzel who is under the floor and centurion in nchardak that is under water
 
-                    if (a_ref->formID == 0x45921)
+                    case (0x45921):
                     {
                         //odahviing. it somehow decides that he is enemy right before the trap is activated and he isnt actually an enemy, and if we attack him, he will go mad after trap is released which causes 
                         //quest to be bugged and we need to travel very far away from him so he calms down.
@@ -34244,7 +36318,38 @@ namespace MiscThings {
                             if (phase > 10)
                                 return RE::BSContainer::ForEachResult::kContinue; //he is going to be trapped
                         }
+
+                        break;
                     }
+
+                    case (0x4027ac1): //dlc2 unearthed sniper draugr that will climb down if we ignore him. ignore him until he is down
+                    {
+                        auto pos = a_ref->GetPosition();
+                        if (pos.z > 1842.0f && pos.x < -2432.5f && pos.x > -3500.0f)
+                        {
+                            auto gate = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4018142);
+                            if (gate && MiscThings::two_state_activator_state(gate) == 1)
+                                return RE::BSContainer::ForEachResult::kContinue;
+                        }
+
+
+                        break;
+                    }
+
+                    case (0x4038665): //dlc2 unearthed dumbas spiders behind expert door that are optional but aggro on you from 5000 meters and constantly call walker to attack them after no draugrs left
+                    case (0x4038666):
+                    case (0x403866a):
+                    {
+                        auto door = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4027a77);
+                        if (door && MiscThings::is_door_locked(door))
+                            return RE::BSContainer::ForEachResult::kContinue;
+
+                        break;
+                    }
+                    }
+
+
+
 
                     if (labyrinthian_shit_gate_condition)
                     {
@@ -35166,315 +37271,7 @@ namespace MiscThings {
 
         std::vector<RE::TESObjectREFR*> objects{};
 
-        //objects_around.clear();
-
-
         int i = 0;
-
-
-        /*
-        RE::TES::GetSingleton()->ForEachReferenceInRange(player_ref, 4000.0,
-            //player->GetParentCell()->ForEachReferenceInRange(player->GetPosition(), 3000.0,
-            [&](RE::TESObjectREFR* a_ref) {
-                std::string name = a_ref->GetName();
-                std::string player_name = RE::PlayerCharacter::GetSingleton()->GetName();
-
-                //objects.push_back(a_ref); //UNLIMITED
-                //return RE::BSContainer::ForEachResult::kContinue;
-
-                if (!a_ref)
-                    return RE::BSContainer::ForEachResult::kContinue;
-
-                if (name[0] != '\0' && std::size(name) > 1 && name != player_name)
-                {
-
-                    auto base_obj = a_ref->GetBaseObject();
-                    RE::FormType base_type{};
-
-                    if (base_obj)
-                    {
-                        base_type = base_obj->GetFormType();
-                        bool debug_type = true;
-
-
-                    }
-                    else
-                    {
-                        bool no_base_object = true;
-                    }
-
-                    std::string form_editor_name = a_ref->GetFormEditorID();
-
-                    if (form_editor_name.find("Merchant") != std::string::npos && form_editor_name.find("Chest") != std::string::npos)
-                        return RE::BSContainer::ForEachResult::kContinue; //attempt to skip merchant secret chests
-
-
-                    if (a_ref->AsReference()->modelState == 0)
-                        return RE::BSContainer::ForEachResult::kContinue; //skip objects without world model
-
-
-                    if (has_digits(name))
-                        return RE::BSContainer::ForEachResult::kContinue;
-
-
-
-                    if (base_type == RE::FormType::Activator)
-                    {
-                        auto test = (RE::TESObjectACTI*)base_obj;
-                        std::string model = test->GetModel();
-                        if (model.find("Marker_LinkMarker") != std::string::npos) //exclude markers. for some reason their model state is not 0 even though the model doesnt exist
-                            return RE::BSContainer::ForEachResult::kContinue;
-                    }
-
-
-                    if (base_type == RE::FormType::Furniture)
-                    {
-                        //-		benchType	kAlchemy	REX::EnumSet<enum RE::TESFurniture::WorkBenchData::BenchType,unsigned char>
-
-                        auto furniture = (RE::TESFurniture*)base_obj;
-
-                        if (furniture->workBenchData.benchType != RE::TESFurniture::WorkBenchData::BenchType::kNone)
-                        {
-                            //this is a functional workbench.
-                            ;
-                        }
-                        else
-                        {
-                            auto test = (RE::TESFurniture*)base_obj;
-                            std::string model = test->GetModel();
-                            if (model.find("Markers//") != std::string::npos) //exclude markers. for some reason their model state is not 0 even though the model doesnt exist
-                                return RE::BSContainer::ForEachResult::kContinue;
-                        }
-                    }
-
-                    if (name.find("not be visible") != std::string::npos) //"This should not be visible [Furniture]"
-                        return RE::BSContainer::ForEachResult::kContinue;
-
-                    if (name.find("Do Not Delete") != std::string::npos)
-                        return RE::BSContainer::ForEachResult::kContinue;
-
-                    if (name.find("Invisible") != std::string::npos && name.find("Marker") != std::string::npos)
-                        return RE::BSContainer::ForEachResult::kContinue;
-
-
-
-
-                    switch (type)
-                    {
-                    case (1):
-                    {
-                        if (a_ref->AsReference()->IsActor())
-                        {
-                            objects.push_back(a_ref);
-                            //objects_around.insert({ i, a_ref });
-                            i++;
-                        }
-                        break;
-                    }
-
-                    case (2):
-                    {
-                        if (a_ref->AsReference()->IsInventoryObject())
-                        {
-                            objects.push_back(a_ref);
-                            //objects_around.insert({ i, a_ref });
-                            i++;
-                        }
-                        break;
-                    }
-
-                    case (3):
-                    {
-                        //if (a_ref->AsReference()->HasContainer() && !a_ref->AsReference()->IsActor() && a_ref->AsReference()->modelState != 0)
-                        if (base_type == RE::FormType::Container)
-                        {
-                            //TODO: filter merchant chests
-                            
-                            //const std::string_view a_editorID = "MerchantSolitudeBlacksmith";
-                            //std::string form_editor_name = a_ref->GetFormEditorID();
-                            //std::string form_editor_name2 = base_obj->GetFormEditorID();
-                            //auto test_form = RE::TESObjectREFR::LookupByID(0xa6c07);
-                            //auto test_form2 = RE::TESObjectREFR::LookupByID(0xa6c0b);
-                            //std::string form_editor_name3 = test_form->GetFormEditorID();
-                            //std::string form_editor_name4 = test_form2->GetFormEditorID();
-                            //auto test123 = base_obj->GetFormID();
-                            //auto test = RE::TESForm::LookupByEditorID(a_editorID);
-                            
-
-                            objects.push_back(a_ref);
-                            //objects_around.insert({ i, a_ref });
-                            i++;
-                        }
-                        break;
-                    }
-
-                    case (4):
-                    {
-                        //fill with somethins useful
-                        break;
-                    }
-
-                    case (5):
-                    {
-
-                        if (base_type == RE::FormType::Door)
-                        {
-                            objects.push_back(a_ref);
-                            //objects_around.insert({ i, a_ref });
-                            i++;
-                        }
-
-                        break;
-                    }
-
-                    case (6):
-                    {
-                        if (base_type == RE::FormType::Activator)
-                        {
-                            objects.push_back(a_ref);
-                            i++;
-                        }
-
-                        if (base_type == RE::FormType::Furniture)
-                        {
-                            auto furniture = (RE::TESFurniture*)base_obj;
-                            auto workbenchtype = furniture->workBenchData.benchType;
-                            if (workbenchtype == RE::TESFurniture::WorkBenchData::BenchType::kNone)
-                            {
-                                if (furniture->HasKeywordString("ActivatorLever") || furniture->HasKeywordString("isPullChain"))
-                                {
-                                    objects.push_back(a_ref);
-                                    i++;
-                                }
-                            }
-                        }
-
-
-
-                        break;
-                    }
-
-
-                    case (7):
-                    {
-                        if (base_obj)
-                        {
-                            bool is_harvestable = false;
-
-                            if (base_type == RE::FormType::Tree)
-                            {
-                                auto tree_form = (RE::TESObjectTREE*)base_obj;
-
-                                auto test_flags = a_ref->AsReference()->GetFormFlags();
-
-                                bool already_harvested = false;
-
-                                if (test_flags & RE::TESObjectREFR::RecordFlags::kHarvested) //THIS FLAG IS POTENTIALLY INCORRECT.
-                                    already_harvested = true;
-
-                                if (test_flags & 2048) //this is potentially only one we need here
-                                    already_harvested = true;
-
-
-
-
-                                if (tree_form->produceItem && !already_harvested)
-                                    is_harvestable = true;
-                            }
-
-                            if (base_type == RE::FormType::Flora)
-                            {
-                                auto tree_form = (RE::TESFlora*)base_obj;
-
-                                if (tree_form->produceItem)
-                                    is_harvestable = true;
-                            }
-
-
-                            if (is_harvestable)
-                            {
-                                objects.push_back(a_ref);
-                                //objects_around.insert({ i, a_ref });
-                                i++;
-                            }
-                        }
-
-                        break;
-                    }
-
-
-                    case (8):
-                    {
-                        if (base_type == RE::FormType::Furniture)
-                        {
-                            bool this_isnt_a_furniture = false;
-                            auto furniture = (RE::TESFurniture*)base_obj;
-                            auto workbenchtype = furniture->workBenchData.benchType;
-                            if (workbenchtype == RE::TESFurniture::WorkBenchData::BenchType::kNone)
-                            {
-                                if (furniture->HasKeywordString("ActivatorLever") || furniture->HasKeywordString("isPullChain"))
-                                    this_isnt_a_furniture = true;
-                            }
-
-                            if (!this_isnt_a_furniture)
-                            {
-                                objects.push_back(a_ref);
-                                i++;
-                            }
-
-                        }
-
-                        break;
-                    }
-
-
-
-
-                    default:
-                    {
-                        objects.push_back(a_ref);
-                        //objects_around.insert({ i, a_ref });
-                        i++;
-
-                        break;
-                    }
-                    }
-
-                    //FormType::Door
-                    //a_ref->extraList.
-
-                    
-                    //if (a_ref->AsReference()->IsInventoryObject() || a_ref->AsReference()->IsActor() || a_ref->AsReference()->HasContainer() || a_ref->AsReference()) //TODO: this probably doesnt include levers and other stuff like that. need to deal with this
-                    //{
-                    //    objects.push_back(a_ref);
-                    //    objects_around.insert({ i, a_ref });
-                    //    i++;
-                    //}
-                    
-                }
-                return RE::BSContainer::ForEachResult::kContinue;
-            });
-
-        std::sort(objects.begin(), objects.end(), [&](RE::TESObjectREFR* left, RE::TESObjectREFR* right) {
-            //return left->GetDistance(player) > right->GetDistance(player); //switch > to < for inversed order. this is last->closest
-            std::string name_left = left->GetDisplayFullName();
-            std::string name_right = right->GetDisplayFullName();
-            return name_left < name_right; //alphabetical order. top = A
-
-            });
-
-        
-
-
-        //i = 0;
-        for (auto object : objects)
-        {
-            if (!is_object_in_the_list(object))
-                objects_around.insert({ std::size(objects_around), object });
-            //i++;
-        }
-
-        */
 
         objects_around_valid = true;
         
@@ -35491,44 +37288,13 @@ namespace MiscThings {
                 local_copy.push_back(object);
         }
 
-        /*
-        RE::TES::GetSingleton()->ForEachReferenceInRange(player_ref, 50000.0,
-            [&](RE::TESObjectREFR* a_ref) {
-
-                if (a_ref)
-                {
-                    for (std::pair<int, object_data> object : objects_around)
-                    {
-                        if (object.second.object == a_ref)
-                        {
-                            if (is_object_valid(a_ref))
-                                local_copy.push_back(object);
-
-                            return RE::BSContainer::ForEachResult::kContinue;
-                        }
-                    }
-                }
-                
-                return RE::BSContainer::ForEachResult::kContinue;
-            });
-        */
-
-
-
 
         std::sort(local_copy.begin(), local_copy.end(), [&](std::pair<int, object_data> left, std::pair<int, object_data> right) {
-            //if (decltype(left.second) != RE::TESObjectREFR*)
 
             if (left.second.object && right.second.object && left.second.object->data.objectReference && right.second.object->data.objectReference && left.second.object->formID && right.second.object->formID)
                 return left.second.object->GetDistance(player) < right.second.object->GetDistance(player); //switch > to < for inversed order. this is last->closest
             else
                 return false;
-
-            //left.second->data.objectReference->IsDestroyed();
-
-            //std::string name_left = left.second->GetDisplayFullName();
-            //std::string name_right = right.second->GetDisplayFullName();
-            //return name_left < name_right; //alphabetical order. top = A
 
             });
 

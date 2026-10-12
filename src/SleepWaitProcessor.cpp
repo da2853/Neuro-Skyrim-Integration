@@ -192,8 +192,9 @@ namespace SleepWaitProcessor {
 			action = "sleep";
 		}
 		
+		std::string vampirism_advice = MiscThings::is_vampire() ? "As a vampire, you have weakness to sunlight (applies only when you are outside and it is daytime, from 5 AM to 7 PM) " : "";
 
-		std::string result = "You are in " + sleep_or_wait + " menu in Skyrim. Choose how many hours to " + action + ". Current date and time: " + get_current_time() + ". You can send -1 to cancel " + sleep_or_wait + " menu.";
+		std::string result = "You are in " + sleep_or_wait + " menu in Skyrim. Choose how many hours to " + action + ". Current date and time: " + get_current_time() + ". You can send -1 to cancel " + sleep_or_wait + " menu. " + vampirism_advice;
 
 		return result;
 	}

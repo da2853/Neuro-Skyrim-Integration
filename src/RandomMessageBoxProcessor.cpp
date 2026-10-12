@@ -318,12 +318,27 @@ namespace RandomMessageBoxProcessor {
 							}
 							else
 							{
+
+								if (text.find("Continue along the path, don't tread where") != std::string::npos) //vahlok tomb, pressure plate puzzle
+								{
+									auto vahlok_quest = (RE::TESQuest*)RE::TESForm::LookupByID(0x4019b4a);
+									if (vahlok_quest)
+									{
+										if (!MiscThings::GetStageDone(vahlok_quest, 325))
+										{
+											Observer::set_quest_puzzle_type(8);
+										}
+									}
+								}
+
+
 								rolled_over = false;
 								menu->uiMovie->Invoke(("_root.MessageMenu.Buttons.Button" + index + ".onPress").c_str(), nullptr, nullptr, 0);
 								set_universal_block(1.0f);
 								//reset_menu();
 								//supposedly we exit the menu now
 								done = true;
+
 							}
 						}
 					}

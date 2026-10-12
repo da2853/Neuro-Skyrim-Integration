@@ -2,6 +2,213 @@
 /* useful stuff
 
 
+
+//some garbage from player_state_monitor
+
+
+        //MiscThings::cant_shout_yet();
+
+        //MiscThings::friendly_fire_test(true, nullptr);
+
+
+        //RE::TESObjectREFR* test_hound = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x10d418);
+        
+        RE::TESObjectREFR* test_hound = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x1bcee);
+        if (test_hound)
+        {
+            float pi = RE::NI_PI;
+
+
+            auto camera_pos = RE::PlayerCamera::GetSingleton()->pos;
+
+            auto aim_pos = WalkerProcessor::get_estimate_aim_pos(test_hound, true, false);
+
+            auto delta_pos = aim_pos - camera_pos;
+
+            auto delta_pos_norm = delta_pos / delta_pos.Length();
+            RE::NiPoint3 orth_shiftX = { -delta_pos_norm.y, delta_pos_norm.x, 0.0f };
+            RE::NiPoint3 orth_shiftY = MiscThings::rotate_around_axis(orth_shiftX, delta_pos_norm, pi / 2);
+            orth_shiftX.Unitize();
+            orth_shiftY.Unitize();
+
+
+            RE::NiPoint3 orth_shiftZ = { 0.0f, 0.0f, 30.0f };
+
+
+
+
+            auto camera_pos_hands = camera_pos;
+            auto camera_pos_hand_right = camera_pos;
+            auto camera_pos_hand_left = camera_pos;
+
+            auto tempO = player->Get3D(true);
+            auto playerRootNode = tempO ? tempO->AsNode() : nullptr;
+
+
+            auto temp = MiscThings::niav_recurse(playerRootNode);
+            auto temp_names = MiscThings::niav_recurse_names(playerRootNode);
+
+
+
+            tempO = playerRootNode ? playerRootNode->GetObjectByName("Camera1st [Cam1]") : nullptr;
+            auto playerCameraNode = tempO ? tempO->AsNode() : nullptr;
+
+            if (playerCameraNode)
+                camera_pos_hands = playerCameraNode->world.translate;
+
+            float r_proj = 10.0f;
+
+            auto hand_right = MiscThings::get_hand_contents(true);
+
+            if (hand_right)
+            {
+                if (hand_right->formType == RE::FormType::Spell || hand_right->formType == RE::FormType::Scroll)
+                {
+                    auto spell = (RE::SpellItem*)hand_right;
+
+                    if (spell->avEffectSetting && spell->avEffectSetting->data.projectileBase)
+                    {
+                        if (spell->avEffectSetting->data.projectileBase->data.collisionRadius > 0.0f)
+                            r_proj = spell->avEffectSetting->data.projectileBase->data.collisionRadius + 5.0f;
+                    }
+                }
+            }
+
+
+            auto camera_pos_right = camera_pos_hands - orth_shiftX * 12.6857910f - orth_shiftY * 7.87097168f + delta_pos_norm * 53.942627f;
+            auto camera_pos_left = camera_pos_hands + orth_shiftX * 12.6857910f - orth_shiftY * 7.87097168f + delta_pos_norm * 53.942627f;
+
+            auto delta_pos_right = aim_pos - camera_pos_right;
+            auto delta_pos_left = aim_pos - camera_pos_left;
+
+
+            auto delta_pos_right_norm = delta_pos_right;
+            auto delta_pos_left_norm = delta_pos_left;
+            delta_pos_right_norm.Unitize();
+            delta_pos_left_norm.Unitize();
+
+            //now update, shifting it behind slightly to account for potential immidiate hit on spawn of projectile
+            camera_pos_right -= delta_pos_right_norm * 30.0f;
+            camera_pos_left -= delta_pos_left_norm * 30.0f;
+
+            delta_pos_right = aim_pos - camera_pos_right;
+            delta_pos_left = aim_pos - camera_pos_left;
+
+
+
+
+            std::vector<RE::NiPoint3> camera_subpos_right{};
+            std::vector<RE::NiPoint3> camera_subpos_left{};
+
+            RE::NiPoint3 shift_base = orth_shiftX * r_proj;
+
+
+
+
+            for (int i = 0; i < 8; i++)
+            {
+                RE::NiPoint3 shift = MiscThings::rotate_around_axis(shift_base, delta_pos_right_norm, pi / 4 * i);
+                camera_subpos_right.push_back(camera_pos_right + shift);
+                camera_subpos_left.push_back(camera_pos_left + shift);
+            }
+
+            //center, right, left
+            float raycast_distance = MiscThings::GetRaycastDistance(camera_pos, delta_pos, 5000.0f, test_hound, 0b00000000000010010000000000000110);
+            float raycast_distance_right = MiscThings::GetRaycastDistance(camera_pos_right, delta_pos_right, 5000.0f, test_hound, 0b00000000000010010000000000000110);
+            float raycast_distance_left = MiscThings::GetRaycastDistance(camera_pos_left, delta_pos_left, 5000.0f, test_hound, 0b00000000000010010000000000000110);
+
+
+            auto raycast_ref = MiscThings::GetRaycastRef(camera_pos, delta_pos, 5000.0f, test_hound, 0b00000000000010010000000000000110);
+            auto raycast_ref_right = MiscThings::GetRaycastRef(camera_pos_right, delta_pos_right, 5000.0f, test_hound, 0b00000000000010010000000000000110);
+            auto raycast_ref_left = MiscThings::GetRaycastRef(camera_pos_left, delta_pos_left, 5000.0f, test_hound, 0b00000000000010010000000000000110);
+
+
+
+
+            //DebugAPI_IMPL::DebugAPI::GetSingleton()->LinesToDraw.clear();
+            //DebugAPI_IMPL::DrawDebug::draw_line(camera_pos, camera_pos + delta_pos, 10.0f, raycast_ref == test_hound ? DebugAPI_IMPL::DrawDebug::Colors::GRN : DebugAPI_IMPL::DrawDebug::Colors::RED);
+            //
+            //for (auto& subpos : camera_subpos_right)
+            //{
+            //	float subraycast_distance = MiscThings::GetRaycastDistance(subpos, delta_pos_right, 5000.0f, test_hound, 0b00000000000010010000000000000110);
+            //	DebugAPI_IMPL::DrawDebug::draw_line(subpos, subpos + delta_pos_right, 5.0f, raycast_ref_right == test_hound && subraycast_distance >= (raycast_distance_right - 100.0f) ? DebugAPI_IMPL::DrawDebug::Colors::GRN : DebugAPI_IMPL::DrawDebug::Colors::RED);
+            //}
+
+            //for (auto& subpos : camera_subpos_left)
+            //{
+            //	float subraycast_distance = MiscThings::GetRaycastDistance(subpos, delta_pos_left, 5000.0f, test_hound, 0b00000000000010010000000000000110);
+            //	DebugAPI_IMPL::DrawDebug::draw_line(subpos, subpos + delta_pos_left, 5.0f, raycast_ref_left == test_hound && subraycast_distance >= (raycast_distance_left - 100.0f) ? DebugAPI_IMPL::DrawDebug::Colors::GRN : DebugAPI_IMPL::DrawDebug::Colors::RED);
+            //}
+
+            //DebugAPI_IMPL::DebugAPI::GetSingleton()->Update();
+
+        }
+        
+
+
+
+
+
+        //RE::TESObjectREFR* test_stone = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0xc6bbd);
+
+        //if (test_stone && !test_stone->IsDisabled())
+        //	bool stop_here = false;
+        //
+
+
+        
+        auto left_caster = player->GetMagicCaster(RE::MagicSystem::CastingSource::kLeftHand);
+        auto state = left_caster->state;
+
+        if (state != old_caster_state)
+        {
+            switch (state.underlying())
+            {
+            case (0):
+                Hooks::add_debug_line("kNone", true);
+                break;
+            case (1):
+                Hooks::add_debug_line("kUnk01", true);
+                break;
+            case (2):
+                Hooks::add_debug_line("kUnk02", true);
+                break;
+            case (3):
+                Hooks::add_debug_line("kReady", true);
+                break;
+            case (4):
+                Hooks::add_debug_line("kUnk04", true);
+                break;
+            case (5):
+                Hooks::add_debug_line("kCharging", true);
+                break;
+            case (6):
+                Hooks::add_debug_line("kCasting", true);
+                break;
+            case (7):
+                Hooks::add_debug_line("kUnk07", true);
+                break;
+            case (8):
+                Hooks::add_debug_line("kUnk08", true);
+                break;
+            case (9):
+                Hooks::add_debug_line("kUnk09", true);
+                break;
+            }
+
+
+            old_caster_state = state;
+        }
+        
+
+        //if (state != RE::MagicCaster::State::kNone && state != RE::MagicCaster::State::kUnk01 && !MiscThings::is_intro2())
+
+
+
+
+
+
+
 //tescondition manual construction, can be replaced with different variant (see IsInDangerousWater form MiscThings)
 
                         bool water_damage_active = false;

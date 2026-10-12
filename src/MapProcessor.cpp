@@ -456,12 +456,26 @@ namespace MapProcessor {
 										//float distance = marker_ref->GetDistance(quest_ref, true, true);
 										auto distance = MiscThings::get_quest_target_distance(a_quest.target, a_quest.quest, marker_ref, a_quest.phantom_target);
 
-
-										if (distance < min_location_dist)
+										if (quest_ref && quest_ref->formID == 0x2002f71) //dawnguard first cave entrance
 										{
-											id_closest_to_quest = marker.first;
-											min_location_dist = distance;
+											if (marker_ref->GetPositionX() > quest_ref->GetPositionX())
+											{
+												if (distance < min_location_dist)
+												{
+													id_closest_to_quest = marker.first;
+													min_location_dist = distance;
+												}
+											}
 										}
+										else
+										{
+											if (distance < min_location_dist)
+											{
+												id_closest_to_quest = marker.first;
+												min_location_dist = distance;
+											}
+										}
+
 									}
 								}
 
@@ -557,7 +571,7 @@ namespace MapProcessor {
 					{
 
 
-						if (closest_quest_id >= 0 && closest_quest_id < std::size(*p_quests))
+						if (p_quests && closest_quest_id >= 0 && closest_quest_id < std::size(*p_quests))
 						{
 
 							auto quest_struct = p_quests->at(closest_quest_id);

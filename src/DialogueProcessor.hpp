@@ -70,7 +70,9 @@
         barter_vendor_confirm_sell_legendary,
         container_type,
         bloodskal_puzzle_type_attack,
-        point_of_no_return_confirm
+        point_of_no_return_confirm,
+        timed_quest_puzzle_array,
+        fish_more
     };
 
     int get_active_force();
