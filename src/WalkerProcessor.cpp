@@ -12,6 +12,32 @@
 #include "ApocryphaRedirects.hpp"
 
 namespace WalkerProcessor {
+    
+    long long last_time_equipped_rod = 0;
+
+    bool grab_info_given = false;
+
+
+    bool check_custom_path_for_fall = false;
+
+    bool hold_camera_horizontally_while_walking = false;
+    bool hold_camera_horizontally_a_bit_down_while_walking = false;
+
+    bool vahlok_saw_platforms_1 = false; //dont reset ever
+    bool vahlok_saw_platforms_2 = false; //dont reset ever
+    bool vahlok_saw_platforms_3 = false; //dont reset ever
+    bool vahlok_saw_platforms_4 = false; //dont reset ever
+
+
+    bool walk_with_extra_precision = false;
+
+    bool vahlok_tomb_advice_received = false; //dont reset ever
+
+
+    bool notified_cool_killcam = false;
+
+    bool try_to_switch_to_nearest_enemy = false;
+
 
     bool tactical_retreat_mode_active = false;
 
@@ -34,11 +60,12 @@ namespace WalkerProcessor {
     float carry_item_was_lost_timer = 0.0f;
     bool carry_item_instead_of_interaction = false;
     bool carry_item_keep_carrying = false;
+    RE::TESObjectREFR* carry_item_item_carried_specific_item = nullptr;
     RE::TESObjectREFR* carry_item_item_carried = nullptr;
     RE::TESObjectREFR* carry_item_item_to_walk_to = nullptr;
     RE::NiPoint3 carry_item_drop_position = RE::NiPoint3::Zero();
-
-
+    bool carry_item_context_given1 = false;
+    bool carry_item_context_given2 = false;
 
     bool point_of_no_return_request_sent = false;
     bool point_of_no_return_choice_valid = false;
@@ -90,6 +117,9 @@ namespace WalkerProcessor {
     int pickup_wiggle_dir = 0;
     float pickup_wiggle_time = 0.0f;
     bool try_pickup_wiggle_body = false;
+    bool walked_again_before_second_pickup_wiggle = false;
+
+
 
     long long last_dodge_projectile_extra_dangerous_timestamp = 0;
     long long last_attack_target_shout_info = 0;
@@ -107,7 +137,7 @@ namespace WalkerProcessor {
     std::map<RE::TESQuest*, std::vector<uint32_t>> followed_quests{};
 
 
-    bool seaching_dragon_land_spot = false;
+    bool searching_dragon_land_spot = false;
 
 
     RE::TESObjectREFR* quest_door_that_needs_a_lockpick = nullptr; //dont reset normally
@@ -172,7 +202,8 @@ namespace WalkerProcessor {
 
 
     bool custom_path_must_jump_on_last_point = false;
-    
+    bool custom_path_must_jump_on_specific_point = false;
+    std::vector<int> custom_path_jump_points{};
 
     //do not reset these in reset_walker()
     RE::TESQuest* last_quest_chosen = nullptr;
@@ -287,6 +318,11 @@ namespace WalkerProcessor {
     RE::TESObjectREFR* activate_refr_after_walker_is_done = nullptr;
     bool always_shift = false;
     bool karthspire_plates = false;
+
+    bool always_sprint = false;
+
+    bool dont_wait_platform_special_vahlok = false;
+
 
     float crouch_timeout = 0.0f;
 
@@ -410,6 +446,9 @@ namespace WalkerProcessor {
 
     RE::TESObjectREFR* last_blocking_targeted_ref = nullptr;
     float have_blocking_targeted_time = 0.0f;
+
+    RE::TESObjectREFR* last_blocking_targeted_ref_enemy = nullptr;
+    float have_blocking_targeted_time_enemy = 0.0f;
 
 
     bool turning_around = false;
@@ -720,6 +759,45 @@ namespace WalkerProcessor {
     */
 
 
+
+    void set_vahlok_saw_platforms(int num)
+    {
+        switch (num)
+        {
+        case (1):
+            vahlok_saw_platforms_1 = true;
+            break;
+
+        case (2):
+            vahlok_saw_platforms_2 = true;
+            break;
+
+        case (3):
+            vahlok_saw_platforms_3 = true;
+            break;
+
+        case (4):
+            vahlok_saw_platforms_4 = true;
+            break;
+        }
+    }
+
+    bool get_vahlok_saw_platforms(int num)
+    {
+        switch (num)
+        {
+        case (1): return vahlok_saw_platforms_1;
+        case (2): return vahlok_saw_platforms_2;
+        case (3): return vahlok_saw_platforms_3;
+        case (4): return vahlok_saw_platforms_4;
+        }
+        return false;
+    }
+
+
+
+
+
     void set_universal_dodging(bool set)
     {
         do_universal_dodging = set;
@@ -830,6 +908,36 @@ namespace WalkerProcessor {
 
         if (!using_custom_path)
         {
+            //same shit but for vahloks tomb from dlc2, water pit.
+
+            if (parent_cell && parent_cell->formID == 0x40142ef)
+            {
+                auto player_pos = player->GetPosition();
+
+                if (player_pos.y > -3805.0f && player_pos.z < -500.0f)
+                {
+                    if (MiscThings::is_player_swimming())
+                    {
+                        wiggle_body_then_walk_again = false;
+                        try_unstuck = false;
+                        invalidate_path();
+                        walk_again(); //soft reset
+                        dont_quicksave_after_custom_path = true;
+                        using_custom_path = true;
+                        walk_again_when_finished = true;
+                        current_path_point = 0;
+                        custom_path = CustomWalkerPaths::vahlok_tomb_out_of_water;
+                        //custom_path_use_z_for_path_point_reached = true;
+                        path = custom_path;
+                        path_valid = true;
+                        dont_shift = true;
+                        return true;
+                    }
+                }
+
+            }
+
+
             if (parent_cell && parent_cell->formID == 0x2001c09) //dlc1 forgotten valley big cave with unpathfindable water. water escapes
             {
                 if (MiscThings::is_player_swimming())
@@ -1228,6 +1336,13 @@ namespace WalkerProcessor {
         current_path_point = -1;
         path.clear();
         use_last_point_of_last_path = false;
+
+        if (custom_path_must_jump_on_specific_point)
+        {
+            custom_path_must_jump_on_specific_point = false;
+            custom_path_jump_points.clear();
+        }
+
     }
 
     void set_just_teleported() //for map
@@ -1445,10 +1560,17 @@ namespace WalkerProcessor {
     {
         auto player = RE::PlayerCharacter::GetSingleton();
         auto player_pos = player->GetPosition();
+        auto player_worldspace = player->GetWorldspace();
 
-        RE::NiPoint3 solitude_prison_exit_point = { -64012.2695, 106968.758, -8161.62207 };
+        if (player_worldspace && player_worldspace->GetFormID() == 0x37edf)
+        {
+            RE::NiPoint3 solitude_prison_exit_point = { -64012.2695, 106968.758, -8161.62207 };
 
-        return (player_pos - solitude_prison_exit_point).Length() < 250.0f;
+            return (player_pos - solitude_prison_exit_point).Length() < 250.0f;
+        }
+        else
+            return false;
+
     }
 
 
@@ -1490,6 +1612,7 @@ namespace WalkerProcessor {
     {
         was_charging_ranged = false;
 
+        auto player = RE::PlayerCharacter::GetSingleton();
 
         if (was_casting_spell_right)
             right_attack_cancel();
@@ -1497,19 +1620,63 @@ namespace WalkerProcessor {
         if (was_casting_spell_left)
             left_attack_cancel();
 
-        was_casting_spell_right = false;
-        was_casting_spell_left = false;
-
-        //right_attack_cancel();
-        //left_attack_cancel();
-
-        auto player = RE::PlayerCharacter::GetSingleton();
-        auto player_actor = (RE::Actor*)player->AsReference();
-
         //GetAttackState()
         if (is_charging_bow())// || //player_actor->GetAttackState() == RE::ATTACK_STATE_ENUM::kBowReleasing || player_actor->GetAttackState() == RE::ATTACK_STATE_ENUM::kBowFollowThrough || player_actor->GetAttackState() == RE::ATTACK_STATE_ENUM::kBowReleased || 
             //is_casting_walker(true) || is_casting_walker(false))
             ready_weapon();
+
+        if (was_casting_spell_right || was_casting_spell_left)
+        {
+            auto spell = (RE::SpellItem*)MiscThings::get_hand_contents(was_casting_spell_right);
+
+            if (spell)
+            {
+                if (spell->formType == RE::FormType::Spell)
+                {
+                    auto equip_manager = RE::ActorEquipManager::GetSingleton();
+
+                    auto other_slot = (RE::BGSEquipSlot*)RE::TESForm::LookupByID(0x00013F42);
+
+                    if (was_casting_spell_right)
+                    {
+                        other_slot = (RE::BGSEquipSlot*)RE::TESForm::LookupByID(0x00013F42);
+                    }
+                    else
+                    {
+                        other_slot = (RE::BGSEquipSlot*)RE::TESForm::LookupByID(0x00013F43);
+                    }
+
+                    equip_manager->EquipSpell(player, spell, other_slot);
+                }
+
+                if (spell->formType == RE::FormType::Scroll)
+                {
+                    auto scroll = (RE::ScrollItem*)spell;
+
+                    auto equip_manager = RE::ActorEquipManager::GetSingleton();
+
+                    auto other_slot = (RE::BGSEquipSlot*)RE::TESForm::LookupByID(0x00013F42);
+
+                    if (was_casting_spell_right)
+                    {
+                        other_slot = (RE::BGSEquipSlot*)RE::TESForm::LookupByID(0x00013F42);
+                    }
+                    else
+                    {
+                        other_slot = (RE::BGSEquipSlot*)RE::TESForm::LookupByID(0x00013F43);
+                    }
+
+                    equip_manager->EquipObject(player, scroll, nullptr, 1, other_slot, true, false, false);
+                }
+
+            }
+
+            //ready_weapon();
+        }
+
+        was_casting_spell_right = false;
+        was_casting_spell_left = false;
+
     }
 
 
@@ -2084,11 +2251,11 @@ namespace WalkerProcessor {
                                             if (landing_point == wait_val)
                                             {
                                                 dragon_landing_marker->MoveTo(player); //prepare
-                                                seaching_dragon_land_spot = true;
+                                                searching_dragon_land_spot = true;
                                                 return;
                                             }
                                                 
-                                            seaching_dragon_land_spot = false;
+                                            searching_dragon_land_spot = false;
 
                                             if (landing_point != RE::NiPoint3::Zero())
                                             {
@@ -2936,7 +3103,10 @@ namespace WalkerProcessor {
         try {
 
             auto player_pos = RE::PlayerCharacter::GetSingleton()->GetPosition();
+            auto parent_cell = RE::PlayerCharacter::GetSingleton()->parentCell;
 
+            if (parent_cell && parent_cell->formID == 0x40142ee) //unearthed dlc2 quest
+                return false;
 
             if (MiscThings::is_on_horse() || MiscThings::is_werewolf() || MiscThings::is_vampirelord() || is_fighting())
                 return false;
@@ -2985,6 +3155,17 @@ namespace WalkerProcessor {
 
             if (custom_path_must_jump_on_last_point && custom_path_appended && current_path_point == (int)std::size(path) - 1)
                 return true;
+
+            if (custom_path_must_jump_on_specific_point && custom_path_appended)
+            {
+                for (auto point : custom_path_jump_points)
+                {
+                    int actual_point_pos = (int)std::size(path) - 1 - point;//shift from the end so append doesnt affect it
+                    if (current_path_point == actual_point_pos)
+                        return true;
+                }
+            }
+
 
 
             if (MiscThings::object_inside_katariah_balcony(player))
@@ -3045,6 +3226,10 @@ namespace WalkerProcessor {
 
         if (do_jumps)
             return false;
+
+        if (always_sprint)
+            return true;
+
 
         //return true;
         bool result = false;
@@ -3292,7 +3477,7 @@ namespace WalkerProcessor {
             //if (target_ref && !use_last_point_of_last_path && (current_path_point < ((int)std::size(path) - 2)))
 
             
-            if (target_ref && !use_last_point_of_last_path && (current_path_point < ((int)std::size(path) - 2)))
+            if (target_ref && (hold_camera_horizontally_while_walking || hold_camera_horizontally_a_bit_down_while_walking || (!use_last_point_of_last_path && (current_path_point < ((int)std::size(path) - 2)))))
             {
                 //auto camera_dirZ_noZ = camera_dirZ;
                 //camera_dirZ_noZ.z = 0.0f;
@@ -3304,11 +3489,35 @@ namespace WalkerProcessor {
 
                 
 
-                if (!input_wants_to_look_down())
-                    desired_direction = along_next_path_points_vector();
-                else
-                    desired_direction = RE::NiPoint3::Zero();
 
+
+
+
+                if (hold_camera_horizontally_while_walking)
+                {
+                    auto camera_y_copy = camera_dirY;
+                    camera_y_copy.z = 0.0f;
+                    camera_y_copy.Unitize();
+                    desired_direction = camera_y_copy;
+                }
+                else
+                {
+                    if (hold_camera_horizontally_a_bit_down_while_walking)
+                    {
+                        auto camera_y_copy = camera_dirY;
+                        camera_y_copy.Unitize();
+                        camera_y_copy.z = -0.3f;
+                        camera_y_copy.Unitize();
+                        desired_direction = camera_y_copy;
+                    }
+                    else
+                    {
+                        if (!input_wants_to_look_down())
+                            desired_direction = along_next_path_points_vector();
+                        else
+                            desired_direction = RE::NiPoint3::Zero();
+                    }
+                }
 
 
                 if (desired_direction != RE::NiPoint3::Zero())
@@ -3336,7 +3545,7 @@ namespace WalkerProcessor {
                 }
 
             }
-            
+
 
             if (mulY < 0)
             {
@@ -3353,9 +3562,19 @@ namespace WalkerProcessor {
             if (player && player->IsSneaking())
                 sneak_coef = 0.65f;
 
+            float special_coef = 1.0f;
 
-            mouse_x = mulX * 125.0f * sneak_coef;//200 //150
-            mouse_y = mulZ * 60.0f * sneak_coef;//200
+            if (carry_item_keep_carrying)
+            {
+                special_coef = 0.5f;
+
+                if (carry_item_item_carried && carry_item_item_carried->IsActor())
+                    special_coef = 0.2f;
+            }
+                
+
+            mouse_x = mulX * 125.0f * sneak_coef * special_coef;//200 //150
+            mouse_y = mulZ * 60.0f * sneak_coef * special_coef;//200
 
             if (!use_y)
                 mouse_y = 0.0f;
@@ -3442,7 +3661,12 @@ namespace WalkerProcessor {
 
 
 
-            if (abs(mulX) < 0.4 && mulY >= 0)
+            float turning_around_threshold = 0.4f;
+
+            if (walk_with_extra_precision)
+                turning_around_threshold = 0.2f;
+
+            if (abs(mulX) < turning_around_threshold && mulY >= 0)
             {
                 turning_around = false;
                 //float height_dif = last_point_posZ - path[current_path_point].z;
@@ -3529,10 +3753,10 @@ namespace WalkerProcessor {
                 float stamina_state = MiscThings::get_player_stamina() / MiscThings::get_player_max_stamina();
 
 
-                if (!silly_walk_mode && (!MiscThings::is_interior_cell() || MiscThings::is_running_allowed_in_current_cell()) && may_sprint())
+                if (always_sprint || (!silly_walk_mode && (!MiscThings::is_interior_cell() || MiscThings::is_running_allowed_in_current_cell()) && may_sprint()))
                 {
                     //sprint();
-                    if (stamina_state > 0.6f)
+                    if (stamina_state > 0.6f || (always_sprint && stamina_state > 0.1f))
                     if (!player_is_sprinting())// && !was_sprinting)
                     {
                         if (!launching_sprint())
@@ -4090,6 +4314,25 @@ namespace WalkerProcessor {
     }
     
 
+    bool has_telekinesis_item_in_sight()
+    {
+        auto crosshair_data = RE::CrosshairPickData::GetSingleton();
+        if (crosshair_data && crosshair_data->grabPickRef && crosshair_data->grabPickRef.get() && crosshair_data->grabPickRef.get().get())
+        {
+            auto hand_right = MiscThings::get_hand_contents(true);
+            auto hand_left = MiscThings::get_hand_contents(false);
+
+            if ((hand_right && hand_right->formID == 0x1A4CC && is_casting_walker(true)) || (hand_left && hand_left->formID == 0x1A4CC && is_casting_walker(false)))
+            {
+                auto grab_ref = crosshair_data->grabPickRef.get().get();
+                if (grab_ref->GetBaseObject() && grab_ref->GetBaseObject()->IsInventoryObject() && grab_ref == target_ref)
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
 
 
     RE::TESObjectREFR* get_targeted_ref_raw()
@@ -4258,6 +4501,27 @@ namespace WalkerProcessor {
 
             switch (target_ref->formID)
             {
+            case (0x401edf8): //black book6 final
+            {
+                if (temp_result->formID == 0x40275eb)
+                    return target_ref;
+                break;
+            }
+
+            case (0x4017f7b): //black book5 final
+            {
+                if (temp_result->formID == 0x40275dc)
+                    return target_ref;
+                break;
+            }
+
+            case (0x4017f8a): //black book4 final
+            {
+                if (temp_result->formID == 0x40275e2)
+                    return target_ref;
+                break;
+            }
+
 
             case (0x401edf7): //black book3 (bloodskal) inside apocrypha final
             {
@@ -4415,6 +4679,51 @@ namespace WalkerProcessor {
 
 
 
+    RE::TESObjectREFR* test_enemy_blocks_another_enemy(float dtime, RE::TESObjectREFR* ignore_ref = nullptr)
+    {
+        if (interaction_after_walk == 3)
+        {
+            auto camera = RE::PlayerCamera::GetSingleton();
+            auto camera_dir = camera->cameraRoot.get()->world.rotate;
+            auto camera_pos = camera->pos;
+
+
+            auto targeted_ref = get_targeted_ref();
+
+            //auto targeted_ref = MiscThings::GetRaycastRef(camera_pos, camera_dir.GetVectorY(), 300.0f, nullptr);
+
+            if (targeted_ref && targeted_ref != ignore_ref && targeted_ref->IsActor() && MiscThings::is_enemy_to_actor(targeted_ref))
+            {
+                std::string blocking_name = MiscThings::insert_object_into_list_and_get_info(targeted_ref);
+
+                if (blocking_name != "" && !turning_around)
+                {
+                    if (last_blocking_targeted_ref_enemy == targeted_ref)
+                    {
+                        if (have_blocking_targeted_time_enemy > 0.4f && walker_active_time > 2.0f)//0.15f)
+                        {
+                            return targeted_ref;
+                        }
+                        else
+                            have_blocking_targeted_time_enemy += dtime;
+                    }
+                    else
+                    {
+                        last_blocking_targeted_ref_enemy = targeted_ref;
+                        have_blocking_targeted_time_enemy = 0.0f;
+                    }
+                }
+                else
+                {
+                    last_blocking_targeted_ref_enemy = nullptr;
+                    have_blocking_targeted_time_enemy = 0.0f;
+                }
+            }
+        }
+
+        return nullptr;
+    }
+
 
     std::string test_about_to_be_blocked_by_blocking(float dtime, RE::TESObjectREFR* ignore_ref = nullptr)
     {
@@ -4426,6 +4735,8 @@ namespace WalkerProcessor {
        //     return result;
        // }
 
+        if (carry_item_keep_carrying)
+            return "";
 
         auto camera = RE::PlayerCamera::GetSingleton();
         auto camera_dir = camera->cameraRoot.get()->world.rotate;
@@ -4799,7 +5110,7 @@ namespace WalkerProcessor {
         bool lookat_used = false;
 
 
-        if ((target->IsHumanoid() || MiscThings::is_seeker(target)) && !MiscThings::dont_use_head_node(target) && !(target->IsActor() && ((RE::Actor*)target)->GetLifeState() == RE::ACTOR_LIFE_STATE::kBleedout))// && !target->IsDead())
+        if ((target->IsHumanoid() || MiscThings::is_seeker(target)) && !MiscThings::dont_use_head_node(target) && !(target->IsActor() && (((RE::Actor*)target)->GetLifeState() == RE::ACTOR_LIFE_STATE::kBleedout) || MiscThings::is_actor_staggering(target)))// && !target->IsDead())
         {
             auto target_actor = (RE::Actor*)target;
 
@@ -4992,7 +5303,7 @@ namespace WalkerProcessor {
 
         //Hooks::add_debug_line("LOCK_CAMERA_CALLED", true);
 
-        if (input_wants_to_look_down() || (start_attacking && (MiscThings::is_summon_spell(get_current_active_hand()) || MiscThings::is_cast_on_ground_spell(get_current_active_hand()))))
+        if (!shout_mode && (input_wants_to_look_down() || (start_attacking && (MiscThings::is_summon_spell(get_current_active_hand()) || MiscThings::is_cast_on_ground_spell(get_current_active_hand())))))
             return false;
 
 
@@ -5004,13 +5315,41 @@ namespace WalkerProcessor {
             speed_koef = 1.0f;
 
 
-        if (MiscThings::is_werewolf())
+        if (MiscThings::is_werewolf() && !searching_dragon_land_spot && !(MiscThings::is_dragon(target) && MiscThings::is_flying(target)))
         {
             if (speed_koef < 2.0f)
                 speed_koef = 2.0f;
 
             force_high_precision = false;
         }
+
+        if (MiscThings::is_werewolf() && MiscThings::is_dragon(target) && MiscThings::is_flying(target))
+        {
+            force_high_precision = true;
+        }
+
+
+        if (MiscThings::get_hand_contents(get_current_active_hand()) && MiscThings::get_hand_contents(get_current_active_hand())->formID == 0x1A4CC) //telekinesis
+        {
+            force_high_precision = true;
+        }
+
+
+        if (carry_item_keep_carrying)
+        {
+            if (speed_koef > 0.5f)
+            {
+                speed_koef = 0.5f;
+
+                if (carry_item_item_carried && carry_item_item_carried->IsActor())
+                    speed_koef = 0.2f;
+            }
+
+            force_high_precision = true;
+
+        }
+
+                
 
 
         auto player = RE::PlayerCharacter::GetSingleton();
@@ -5086,7 +5425,7 @@ namespace WalkerProcessor {
             if (target_actor->currentProcess)
                 if (target_actor->currentProcess->middleHigh)
                 {
-                    if (MiscThings::dont_use_head_node(target) || is_pickpocketing() || (player->GetDistance(target) > 400.0f && is_fighting() && has_ranged_weapon_equipped(get_current_active_hand())) || (target_actor->GetLifeState() == RE::ACTOR_LIFE_STATE::kBleedout))
+                    if (MiscThings::dont_use_head_node(target) || is_pickpocketing() || (player->GetDistance(target) > 400.0f && is_fighting() && has_ranged_weapon_equipped(get_current_active_hand())) || (target_actor->GetLifeState() == RE::ACTOR_LIFE_STATE::kBleedout) || MiscThings::is_actor_staggering(target))
                     {
                         if (target_actor->currentProcess->middleHigh->torsoNode)
                         {
@@ -5213,7 +5552,6 @@ namespace WalkerProcessor {
 
         auto path_point_pos = target_center;
         auto pos_dif = path_point_pos - camera_pos;
-
 
         bool low_range_concentration_spell = is_concentration_spell(get_current_active_hand()) && get_weapon_range(get_current_active_hand()) < 2000.0f;
 
@@ -5349,7 +5687,11 @@ namespace WalkerProcessor {
                     speed_koef = 2.0f;
 
                 if ((MiscThings::get_hand_contents(true) && MiscThings::get_hand_contents(true)->formID == 0x80665ed))
+                {
                     speed_shift = RE::NiPoint3::Zero();
+                    speed_koef = 2.0f;
+                }
+                    
 
 
                 target_center += speed_shift;
@@ -5581,7 +5923,7 @@ namespace WalkerProcessor {
             if (mulY < 0)
             {
                 if (!looking_mode)
-                    mulZ = 0.0f;// -mulZ;
+                    ;//    mulZ = 0.0f;// -mulZ;
 
                 if (mulX < 0.0f)
                     mulX = -0.3f + mulX;
@@ -5757,7 +6099,7 @@ namespace WalkerProcessor {
     float vampirelord_coef_attack = 1.8f;
     float vampirelord_coef_normal = 0.0f;
 
-    float dodge_coef_pathpoint = 1.0f;
+    float dodge_coef_pathpoint = 0.0f;
 
 
 
@@ -5776,15 +6118,18 @@ namespace WalkerProcessor {
         auto parent_cell = player->GetParentCell();
 
         bool blackreach_mode = false;
-                                                                                                //avanchenzel with fucked pathfinding
-        if (player_worldspace == blackreach_worldspace || (parent_cell && parent_cell->formID == 0x4c6dd))
+                                                                                                //avanchenzel with fucked pathfinding       //twilight sepulcher garbage navmesh at the start                                   //dlc2 unearthed dungeon
+        if (player_worldspace == blackreach_worldspace || (parent_cell && parent_cell->formID == 0x4c6dd) || (parent_cell && parent_cell->formID == 0x5b91b && player_pos.y > 3500.0f) || (parent_cell && parent_cell->formID == 0x40142ee))
             blackreach_mode = true; //navmesh in blackreach is very bad. clips through the floor. looks like they changed terrain without remaking navmesh
 
-
+        float swimming_bonus = 0.0f;
+        float swimming_ignore_z_bonus = 100.0f;
 
         try {
-
             float base_reach_distance = 60.0f;
+
+            if (walk_with_extra_precision)
+                base_reach_distance = 20.0f;
 
             //if (std::size(path) < 2)
             //    base_reach_distance = 20.0f;
@@ -5809,9 +6154,9 @@ namespace WalkerProcessor {
                 auto distance = pos_dif.Length();
 
                 if ((int)std::size(path) < 3)
-                    result = distance < (blackreach_mode * 20.0f + base_reach_distance) * (1 + MiscThings::is_on_horse() * 4.0f) * (1 + MiscThings::is_werewolf() * werewolf_coef_pathpoint) * (1 + MiscThings::is_vampirelord() * vampirelord_coef_pathpoint) + 70.0f * MiscThings::is_player_swimming() * (1 + (float)do_dodge_projectile*dodge_coef_pathpoint); //100
+                    result = distance < (blackreach_mode * 20.0f + base_reach_distance) * (1 + MiscThings::is_on_horse() * 4.0f) * (1 + MiscThings::is_werewolf() * werewolf_coef_pathpoint) * (1 + MiscThings::is_vampirelord() * vampirelord_coef_pathpoint) + swimming_bonus * MiscThings::is_player_swimming() * (1 + (float)do_dodge_projectile*dodge_coef_pathpoint); //100
                 else
-                    result = distance < (blackreach_mode * 20.0f + base_reach_distance) * (1 + MiscThings::is_on_horse() * 4.0f) * (1 + MiscThings::is_werewolf() * werewolf_coef_pathpoint) * (1 + MiscThings::is_vampirelord() * vampirelord_coef_pathpoint) + 70.0f * MiscThings::is_player_swimming() * (1 + (float)do_dodge_projectile * dodge_coef_pathpoint); //100
+                    result = distance < (blackreach_mode * 20.0f + base_reach_distance) * (1 + MiscThings::is_on_horse() * 4.0f) * (1 + MiscThings::is_werewolf() * werewolf_coef_pathpoint) * (1 + MiscThings::is_vampirelord() * vampirelord_coef_pathpoint) + swimming_bonus * MiscThings::is_player_swimming() * (1 + (float)do_dodge_projectile * dodge_coef_pathpoint); //100
 
                 if (last_point_of_last_path.z - player_pos.z > 200.0f)
                     result = true; //we either fell or pathfinding glitched
@@ -5880,7 +6225,7 @@ namespace WalkerProcessor {
                         player_pos_noZ.z = 0.0f;
                         path_point_pos_noZ.z = 0.0f;
 
-                        bool actually_ignore_z = player_pos_noZ.GetDistance(path_point_pos_noZ) < 30.0f && abs(player_pos.z - current_path_point_pos.z) < 100.0f;
+                        bool actually_ignore_z = player_pos_noZ.GetDistance(path_point_pos_noZ) < 30.0f && abs(player_pos.z - current_path_point_pos.z) < (100.0f + MiscThings::is_player_swimming()* swimming_ignore_z_bonus);
 
 
                         if (blackreach_mode || (!is_about_to_fall() && actually_ignore_z))
@@ -5893,6 +6238,8 @@ namespace WalkerProcessor {
 
                         auto distance = current_path_point_pos.GetDistance(player_pos);
 
+
+                        
 
                         if (using_custom_path)
                         {
@@ -5919,10 +6266,10 @@ namespace WalkerProcessor {
                                 base_threshold = 60.0f;
 
 
-                            result = distance < base_threshold + 70.0f * MiscThings::is_player_swimming(); //100
+                            result = distance < base_threshold + swimming_bonus * MiscThings::is_player_swimming(); //100
                         }
                         else
-                            result = distance < ((blackreach_mode * 20.0f + base_reach_distance) * (1 + MiscThings::is_on_horse() * 4.0f) * (1 + MiscThings::is_werewolf() * werewolf_coef_pathpoint) * (1 + MiscThings::is_vampirelord() * vampirelord_coef_pathpoint) + 70.0f * MiscThings::is_player_swimming()) * (1 + (float)do_dodge_projectile * dodge_coef_pathpoint); //100
+                            result = distance < ((blackreach_mode * 20.0f + base_reach_distance) * (1 + MiscThings::is_on_horse() * 4.0f) * (1 + MiscThings::is_werewolf() * werewolf_coef_pathpoint) * (1 + MiscThings::is_vampirelord() * vampirelord_coef_pathpoint) + swimming_bonus * MiscThings::is_player_swimming()) * (1 + (float)do_dodge_projectile * dodge_coef_pathpoint); //100
                     }
                     else
                         result = true;
@@ -6312,6 +6659,19 @@ namespace WalkerProcessor {
 
     void reset_walker()
     {
+        grab_info_given = false;
+
+        dont_wait_platform_special_vahlok = false;
+
+        hold_camera_horizontally_while_walking = false;
+        hold_camera_horizontally_a_bit_down_while_walking = false;
+
+        walk_with_extra_precision = false;
+
+        carry_item_item_carried_specific_item = nullptr;
+
+        try_to_switch_to_nearest_enemy = false;
+
         tactical_retreat_mode_active = false;
 
         custom_path_timeout = 0.0f;
@@ -6336,7 +6696,7 @@ namespace WalkerProcessor {
         point_of_no_return_request_sent = false;
         point_of_no_return_choice_valid = false;
         point_of_no_return_choice = false;
-        point_of_no_return_choice_defined = false;
+        //point_of_no_return_choice_defined = false;
 
 
         bloodskal_powerattack_choice_defined = false;
@@ -6374,6 +6734,7 @@ namespace WalkerProcessor {
         try_pickup_wiggle_body = false;
         pickup_wiggle_dir = 0;
         pickup_wiggle_time = 0.0f;
+        walked_again_before_second_pickup_wiggle = false;
 
         //had_whirlwind_sprint_effect = false;
         repath_if_walking = false;
@@ -6391,7 +6752,7 @@ namespace WalkerProcessor {
         midcombat_reanimate_cast = false;
         midcombat_reanimate_cast_done = false;
 
-        seaching_dragon_land_spot = false;
+        searching_dragon_land_spot = false;
 
         dodge_projectile_blast_target = nullptr;
         fight_versus_dangerous_mage_power_attack_if_possible = false;
@@ -6530,6 +6891,10 @@ namespace WalkerProcessor {
         karthspire_plates = false;
 
         always_shift = false;
+        always_sprint = false;
+
+        dont_wait_platform_special_vahlok = false;
+
 
         crouch_timeout = 0.0f;
 
@@ -6648,6 +7013,8 @@ namespace WalkerProcessor {
         custom_path_appended_to_point_index = 0;
 
         custom_path_must_jump_on_last_point = false;
+        custom_path_must_jump_on_specific_point = false;
+        custom_path_jump_points.clear();
 
         just_teleported_timeout = 0.0f;
 
@@ -6704,6 +7071,9 @@ namespace WalkerProcessor {
 
         last_blocking_targeted_ref = nullptr;
         have_blocking_targeted_time = 0.0f;
+
+        last_blocking_targeted_ref_enemy = nullptr;
+        have_blocking_targeted_time_enemy = 0.0f;
 
 
         if (!MiscThings::is_werewolf() && !MiscThings::is_vampirelord() && !MiscThings::is_on_horse() && was_slowwalking)
@@ -7196,6 +7566,7 @@ namespace WalkerProcessor {
         bool result = false;
         auto player = RE::PlayerCharacter::GetSingleton();
 
+
         if (pickup_wiggle_time < 0.3f && player)
         {
             pickup_wiggle_time += dtime;
@@ -7663,6 +8034,9 @@ namespace WalkerProcessor {
 
         if (target_ref)
         {
+            if (target_ref->formID == 0x70c1a25)
+                return false;
+
             auto target_pos = target_ref->GetPosition();
 
 
@@ -7702,7 +8076,7 @@ namespace WalkerProcessor {
                 auto dragonrend = (RE::TESShout*)RE::TESForm::LookupByID(0x44250);
                 bool player_knows_dragonrend = MiscThings::player_has_spell((RE::SpellItem*)dragonrend);
                 bool can_shout = MiscThings::get_shout_cooldown() <= 0.0f;
-                auto raycast_ref = MiscThings::GetRaycastRef(camera_pos, delta_pos, 20000.0f, target_ref, 0b00000000000010010000000000000110); //projectile layer in player group
+                auto raycast_ref = MiscThings::GetRaycastRef(camera_pos, delta_pos, 20000.0f, target_ref, MiscThings::get_player_projectile_filter()); //projectile layer in player group
 
                 dragonrendable_condition = raycast_ref == target_ref && can_shout && player_knows_dragonrend;
             }
@@ -8187,7 +8561,6 @@ namespace WalkerProcessor {
                                                     longer_range_advices_ignored = 0;
                                                 }
                                                     
-
                                                 send_random_context(MiscThings::insert_object_into_list_and_get_info(target_ref) + " is too high! Looking at it instead. " + ranged_weapon_advice, false);
 
                                             }
@@ -8225,10 +8598,14 @@ namespace WalkerProcessor {
 
 
 
-                        auto raycast_ref = MiscThings::GetRaycastRef(camera_pos, delta_pos, range, target_ref, 0b00000000000010010000000000000110); //projectile layer in player group
+                        auto raycast_ref = MiscThings::GetRaycastRef(camera_pos, delta_pos, range, target_ref, MiscThings::get_player_projectile_filter()); //projectile layer in player group
 
+                        auto right_hand = MiscThings::get_hand_contents(true);
+                        auto left_hand = MiscThings::get_hand_contents(false);
 
-                        bool raycast_hands_too = (is_fire_and_forget_spell(true) || is_fire_and_forget_spell(false)) && (distance.Length() > 300.0f || was_already_dead);
+                        bool telekinesis_condition = (right_hand && right_hand->formID == 0x1A4CC) || (left_hand && left_hand->formID == 0x1A4CC);
+
+                        bool raycast_hands_too = (is_fire_and_forget_spell(true) || is_fire_and_forget_spell(false) || (telekinesis_condition)) && (distance.Length() > 300.0f || was_already_dead);
 
                         raycast_hands_too &= !(target_ref->IsDead() && !was_already_dead);
 
@@ -8317,7 +8694,7 @@ namespace WalkerProcessor {
                         if (target_ref && target_ref->formID == 0xdb9d7 && raycast_ref && raycast_ref->formID == 0x80b2c)
                         {
                             raycast_ref = target_ref;
-                            raycast_hands_too = true;
+                            raycast_hands_result = true;
                             //raycast_ref_right = target_ref;
                             //raycast_ref_left = target_ref;
                         }
@@ -8331,7 +8708,7 @@ namespace WalkerProcessor {
                             bool stop_here = false; //to detect when raycast caught player
 
                         //auto raycast_test = raycast_ref == target_ref && (start_attacking || attack_paused || raycast_was_on || !raycast_hands_too || (raycast_ref_right == target_ref && raycast_ref_left == target_ref && raycast_ref_top == target_ref && raycast_ref_bottom == target_ref));
-                        auto raycast_test = (MiscThings::is_werewolf() || raycast_ref == target_ref || (start_attacking && raycast_ref && MiscThings::is_enemy_to_actor(raycast_ref))) && (start_attacking || attack_paused || raycast_was_on || raycast_hands_result);
+                        auto raycast_test = (MiscThings::is_werewolf() || raycast_ref == target_ref || (start_attacking && raycast_ref && MiscThings::is_enemy_to_actor(raycast_ref))) && ((start_attacking && (attack_action_time0 > 0.0f || attack_action_time1 > 0.0f)) || attack_paused || raycast_was_on || (!raycast_hands_too || raycast_hands_result));
                         raycast_test |= start_attacking && WalkerProcessor::is_casting_ritual_spell();
 
                         bool target_visible = false;
@@ -8869,7 +9246,7 @@ namespace WalkerProcessor {
 
         put_explore_on_cooldown(60.0f);
 
-        if (get_explore_cooldown_charges() >= 3)
+        if (get_explore_cooldown_charges() >= 5)
             unregister_explore_action();
 
         right_attack_cancel();
@@ -9231,7 +9608,7 @@ namespace WalkerProcessor {
 
 
 
-    std::pair<bool, std::string> walk_to_object_by_index(int index, int interaction)
+    std::pair<bool, std::string> walk_to_object_by_index(int index, int interaction, bool dont_replace_with_shout)
     {
 
         std::pair<bool, std::string> result{};
@@ -9484,7 +9861,7 @@ namespace WalkerProcessor {
 
                         if (interaction_after_walk == 3)
                         {
-                            if (!MiscThings::player_brawling() && MiscThings::get_shout_cooldown() <= 0.0f && !MiscThings::in_madman_head() && target_ref->IsActor() && !target_ref->IsDead())
+                            if (!dont_replace_with_shout && !MiscThings::player_brawling() && MiscThings::get_shout_cooldown() <= 0.0f && !MiscThings::in_madman_head() && target_ref->IsActor() && !target_ref->IsDead())
                                 MiscThings::use_random_offensive_shout(target_ref);
 
                             result.first = true;
@@ -10542,6 +10919,53 @@ namespace WalkerProcessor {
         }
 
 
+        RE::TESObjectREFR* book4_final = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4017f8a);
+        if (parent_cell && parent_cell->formID == 0x40142f4 && book4_final && player->GetDistance(book4_final) < 500.0f)
+        {
+            RE::TESObjectREFR* reward1 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x40275e1);
+            RE::TESObjectREFR* to_soltsheim = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x40275e3);
+
+            if (reward1 && !reward1->IsDisabled() && to_soltsheim && to_soltsheim->IsDisabled())
+            {
+                reset_walker();
+                result.first = false;
+                result.second = "[The Book offers you several rewards, you need to pick one of provided options (interactive objects nearby)]";
+                do_delayed_poke();
+                return result;
+            }
+        }
+
+        RE::TESObjectREFR* book5_final = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4017f7b);
+        if (parent_cell && parent_cell->formID == 0x40142f4 && book5_final && player->GetDistance(book5_final) < 500.0f)
+        {
+            RE::TESObjectREFR* reward1 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x40275de);
+            RE::TESObjectREFR* to_soltsheim = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x40275dd);
+
+            if (reward1 && !reward1->IsDisabled() && to_soltsheim && to_soltsheim->IsDisabled())
+            {
+                reset_walker();
+                result.first = false;
+                result.second = "[The Book offers you several rewards, you need to pick one of provided options (interactive objects nearby)]";
+                do_delayed_poke();
+                return result;
+            }
+        }
+
+        RE::TESObjectREFR* book6_final = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x401edf8);
+        if (parent_cell && parent_cell->formID == 0x40142f5 && book6_final && player->GetDistance(book6_final) < 500.0f)
+        {
+            RE::TESObjectREFR* reward1 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x40275ed);
+            RE::TESObjectREFR* to_soltsheim = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x40275ec);
+
+            if (reward1 && !reward1->IsDisabled() && to_soltsheim && to_soltsheim->IsDisabled())
+            {
+                reset_walker();
+                result.first = false;
+                result.second = "[The Book offers you several rewards, you need to pick one of provided options (interactive objects nearby)]";
+                do_delayed_poke();
+                return result;
+            }
+        }
 
         if (last_quest_chosen)
         {
@@ -10861,6 +11285,54 @@ namespace WalkerProcessor {
                 }
             }
 
+            RE::TESObjectREFR* book4_final = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4017f8a);
+            if (parent_cell && parent_cell->formID == 0x40142f3 && book4_final && player->GetDistance(book4_final) < 500.0f)
+            {
+                RE::TESObjectREFR* reward1 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x40275e1);
+                RE::TESObjectREFR* to_soltsheim = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x40275e3);
+
+                if (reward1 && !reward1->IsDisabled() && to_soltsheim && to_soltsheim->IsDisabled())
+                {
+                    reset_walker();
+                    result.first = false;
+                    result.second = "[The Book offers you several rewards, you need to pick one of provided options (interactive objects nearby)]";
+                    do_delayed_poke();
+                    return result;
+                }
+            }
+
+
+            RE::TESObjectREFR* book5_final = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4017f7b);
+            if (parent_cell && parent_cell->formID == 0x40142f4 && book5_final && player->GetDistance(book5_final) < 500.0f)
+            {
+                RE::TESObjectREFR* reward1 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x40275de);
+                RE::TESObjectREFR* to_soltsheim = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x40275dd);
+
+                if (reward1 && !reward1->IsDisabled() && to_soltsheim && to_soltsheim->IsDisabled())
+                {
+                    reset_walker();
+                    result.first = false;
+                    result.second = "[The Book offers you several rewards, you need to pick one of provided options (interactive objects nearby)]";
+                    do_delayed_poke();
+                    return result;
+                }
+            }
+
+            RE::TESObjectREFR* book6_final = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x401edf8);
+            if (parent_cell && parent_cell->formID == 0x40142f5 && book6_final && player->GetDistance(book6_final) < 500.0f)
+            {
+                RE::TESObjectREFR* reward1 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x40275ed);
+                RE::TESObjectREFR* to_soltsheim = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x40275ec);
+
+                if (reward1 && !reward1->IsDisabled() && to_soltsheim && to_soltsheim->IsDisabled())
+                {
+                    reset_walker();
+                    result.first = false;
+                    result.second = "[The Book offers you several rewards, you need to pick one of provided options (interactive objects nearby)]";
+                    do_delayed_poke();
+                    return result;
+                }
+            }
 
             auto player_ref = player->AsReference();
 
@@ -11062,6 +11534,68 @@ namespace WalkerProcessor {
                                             }
 
                                         }
+
+
+                                        if (quest_entry.quest && quest_entry.quest->formID == 0x401810b) //dlc2 unearhed quest. notify player if he has no gold to proceed
+                                        {
+                                            switch (objective->index)
+                                            {
+                                            case (40):
+                                            {
+                                                if (MiscThings::get_player_gold() < 1000)
+                                                {
+                                                    reset_walker();
+                                                    result.first = false;
+                                                    result.second = "[You need to have 1000 gold to proceed in this quest. You dont have enough yet]";
+                                                    do_delayed_poke();
+                                                    return result;
+                                                }
+                                                break;
+                                            }
+
+                                            case (160):
+                                            {
+                                                if (MiscThings::get_player_gold() < 2000)
+                                                {
+                                                    reset_walker();
+                                                    result.first = false;
+                                                    result.second = "[You need to have 2000 gold to proceed in this quest. You dont have enough yet]";
+                                                    do_delayed_poke();
+                                                    return result;
+                                                }
+                                                break;
+                                            }
+
+                                            case (260):
+                                            {
+                                                if (MiscThings::get_player_gold() < 3000)
+                                                {
+                                                    reset_walker();
+                                                    result.first = false;
+                                                    result.second = "[You need to have 3000 gold to proceed in this quest. You dont have enough yet]";
+                                                    do_delayed_poke();
+                                                    return result;
+                                                }
+                                                break;
+                                            }
+
+                                            case (360):
+                                            {
+                                                if (MiscThings::get_player_gold() < 5000)
+                                                {
+                                                    reset_walker();
+                                                    result.first = false;
+                                                    result.second = "[You need to have 5000 gold to proceed in this quest. You dont have enough yet]";
+                                                    do_delayed_poke();
+                                                    return result;
+                                                }
+                                                break;
+                                            }
+                                            }
+                                        }
+
+
+
 
                                         if (phantom_objective || quest_ref_handle)
                                         {
@@ -11422,7 +11956,7 @@ namespace WalkerProcessor {
                                                                     fasttravel_advice_last_quest_target = last_quest_target;
 
                                                                     //advice
-                                                                    std::string advice = big_distance + " Closest fast-travel location: " + good_fasttravel_location + ". (You can use map to fast travel)";
+                                                                    std::string advice = big_distance + " Closest fast-travel location (may be not the actual location of quest, just nearest where you can fast-travel): " + good_fasttravel_location + ". (You can use map to fast travel)";
                                                                     add_delayed_message(advice);
                                                                 }
 
@@ -11771,6 +12305,13 @@ namespace WalkerProcessor {
                             //no objective
                             result.first = false;
                             result.second = "This quest has no target to walk to. Perhaps you need to do something else to complete it...";
+
+                            if (quest_entry.quest && ((quest_entry.quest->formID & 0xFF000000) == 0x5000000))
+                            {
+                                //fishing quest. add advice
+                                result.second += " (If its a quest to catch fish - you need to have a fishing rod, and then find fishing supplies near water. Usually, fishing supplies can be found near settlements. If its a quest to [read something], you need to read it from your inventory)";
+                            }
+
                             return result;
                         }
                     }
@@ -11780,6 +12321,13 @@ namespace WalkerProcessor {
                     //no objective
                     result.first = false;
                     result.second = "This quest has no target to walk to. Perhaps you need to do something else to complete it...";
+
+                    if (quest_entry.quest && ((quest_entry.quest->formID & 0xFF000000) == 0x5000000))
+                    {
+                        //fishing quest. add advice
+                        result.second += " (If its a quest to catch fish - you need to have a fishing rod, and then find fishing supplies near water. Usually, fishing supplies can be found near settlements. If its a quest to [read something], you need to read it from your inventory)";
+                    }
+
                     return result;
                 }
             }
@@ -11850,6 +12398,16 @@ namespace WalkerProcessor {
             {
                 if (parent_cell && ((parent_cell->formID == 0x40173b3) || (parent_cell->formID == 0x40142f1) || (parent_cell->formID == 0x40142f1) || (parent_cell->formID == 0x40173b2)))
                     return false;
+            }
+
+            if (target_ref)
+            {
+                switch (target_ref->formID)
+                {
+                case (0x4020d2a): //dlc2 unearthed quest chains
+                case (0x4018165):
+                    return false;
+                }
             }
         }
 
@@ -12604,6 +13162,76 @@ namespace WalkerProcessor {
 
 
 
+    bool walk_custom_path(RE::TESObjectREFR* target_object, std::vector<RE::NiPoint3> positions, bool in_append_to_normal_path, bool in_walk_again_when_finished, bool in_dont_quicksave_after_walk, bool in_reset_after_walk, bool extra_precision, bool in_hold_camera_horizontally_a_bit_down_while_walking, bool in_check_custom_path_for_fall, bool must_shift, bool must_sprint, bool in_dont_wait_platform_special_vahlok)
+    {
+        auto cant_walk_reason = get_cant_walk_reason();
+
+        if (cant_walk_reason != "")
+        {
+            return false;
+        }
+
+
+        auto player = RE::PlayerCharacter::GetSingleton();
+        auto player_actor = (RE::Actor*)player->AsReference();
+
+        auto control_map = RE::ControlMap::GetSingleton();
+        bool can_walk = control_map->enabledControls.any(RE::UserEvents::USER_EVENT_FLAG::kMovement);
+        bool can_look = control_map->enabledControls.any(RE::UserEvents::USER_EVENT_FLAG::kLooking) || player->IsInRagdollState();;
+        bool can_interact = control_map->enabledControls.any(RE::UserEvents::USER_EVENT_FLAG::kActivate);
+        bool can_fight = control_map->enabledControls.any(RE::UserEvents::USER_EVENT_FLAG::kFighting);
+
+        //if (player_actor && !player_actor->movementController->controlsDriven)
+        if (!can_walk && !can_look)
+        {
+            return false;
+        }
+
+
+        reset_walker();
+
+        using_custom_path = true;
+        walk_again_when_finished = in_walk_again_when_finished;
+        dont_quicksave_after_custom_path = in_dont_quicksave_after_walk;
+        reset_after_walk = in_reset_after_walk;
+
+        walk_with_extra_precision = extra_precision;
+
+        CustomWalkerPaths::template_path = positions;
+
+        custom_path = CustomWalkerPaths::template_path;
+
+        target_ref = target_object;
+        have_target_to_walk = true;
+        interaction_after_walk = 0;
+
+        hold_camera_horizontally_a_bit_down_while_walking = in_hold_camera_horizontally_a_bit_down_while_walking;
+        check_custom_path_for_fall = in_check_custom_path_for_fall;
+
+        always_shift = must_shift;
+        always_sprint = must_sprint;
+
+        dont_wait_platform_special_vahlok = in_dont_wait_platform_special_vahlok;
+
+        if (!in_append_to_normal_path)
+        {
+            path_valid = true;
+            path = custom_path;
+        }
+
+        send_random_context("You walk towards on the plates you chose...", false);
+
+        right_attack_cancel();
+        left_attack_cancel();
+
+        reminder_target_name = "Puzzle Pressure Plates";
+        reminder_start_pos = player->GetPosition();
+
+        return true;
+
+    }
+
+
     std::pair<bool, std::string> run_away(bool tactical_retreat_mode)
     {
         std::pair<bool, std::string> result{};
@@ -12656,9 +13284,13 @@ namespace WalkerProcessor {
             result.first = true;
 
             if (tactical_retreat_mode)
+            {
                 tactical_retreat_mode_active = true;
-
-            result.second = "[Running away...]";
+                result.second = "[You try to get away from enemies...]";
+            }
+            else
+                result.second = "[Running away...]";
+            
 
             solitude_post_emperor_check(target_ref);
             katariah_post_emperor_check(target_ref);
@@ -13565,7 +14197,7 @@ namespace WalkerProcessor {
 
                     auto range1 = spell->GetRange();
                     if (range1 > 0)
-                        return range1;
+                        return range1 < 100.0f ? 100.0f : range1;
 
                     if (spell->GetDelivery() != RE::MagicSystem::Delivery::kSelf)
                     {
@@ -13729,8 +14361,19 @@ namespace WalkerProcessor {
         {
             //auto camera = RE::PlayerCamera::GetSingleton();
 
-            
+            /*
+            if (!notified_cool_killcam)
+            {
+                notified_cool_killcam = true;
 
+                std::string action = MiscThings::killcam_action_name();
+
+                if (action != "")
+                {
+                    send_random_context("You " + action, true);
+                }
+            }
+            */
 
 
             //if (camera) //this is shit
@@ -13839,7 +14482,7 @@ namespace WalkerProcessor {
         }
         else
         {
-            bool stop_here = false;
+            notified_cool_killcam = false;
         }
             
 
@@ -14725,10 +15368,13 @@ namespace WalkerProcessor {
 
 
                 float choose_next_action = (float)std::rand() / RAND_MAX;
-                float chance = 0.2f;
+                float chance = 0.2f; //chance of doing left hand next
 
                 if ((dualhanding_two_weapons || MiscThings::is_werewolf()))
                     chance = 0.49f;
+
+                if (left_is_block())
+                    chance = 0.0f;
 
                 if (staff_of_magnus_in_left)
                     chance = 0.03;
@@ -14750,6 +15396,8 @@ namespace WalkerProcessor {
                 int nettlebane_hand = MiscThings::get_nettlebane_hand_for_target(target_ref);
                 if (nettlebane_hand >= 0)
                     attack_action = !(bool)nettlebane_hand; //not bitwise
+
+                
 
             }
 
@@ -15375,10 +16023,16 @@ namespace WalkerProcessor {
 
                             if (has_staff_equipped(true) || is_fire_and_forget_spell(true))
                             {
+                                was_casting_spell_right = false;
+
                                 if (pause_post_attack < 1.0f)
                                 {
                                     if (dualcasting)
+                                    {
+                                        was_casting_spell_left = false;
                                         left_attack_cancel();
+                                    }
+                                        
 
                                     right_attack_cancel();
                                     pause_post_attack += dtime;
@@ -15464,6 +16118,11 @@ namespace WalkerProcessor {
 
 
                             float chance = 0.2f;
+
+
+                            if (MiscThings::is_cast_on_ground_spell(true) || MiscThings::is_summon_spell(true) || MiscThings::is_offensive_spell(true))
+                                chance = 1.0f;
+
 
                             if ((dualhanding_two_weapons || MiscThings::is_werewolf()))
                                 chance = 0.49f;
@@ -16113,12 +16772,19 @@ namespace WalkerProcessor {
 
                             if (has_staff_equipped(false) || is_fire_and_forget_spell(false))
                             {
+                                
+
                                 if (pause_post_attack < 1.0f)
                                 {
+                                    was_casting_spell_left = false;
                                     left_attack_cancel();
-                                    
+
                                     if (dualcasting)
+                                    {
+                                        was_casting_spell_right = false;
                                         right_attack_cancel();
+                                    }
+                                        
 
                                     pause_post_attack += dtime;
                                     goto finalize_attack;
@@ -16189,6 +16855,10 @@ namespace WalkerProcessor {
                             attack_target_needs_to_come_closer = false;
 
                             float chance = 0.2f;
+
+                            if (MiscThings::is_cast_on_ground_spell(false) || MiscThings::is_summon_spell(false) || MiscThings::is_offensive_spell(false))
+                                chance = 0.0f;
+
 
                             if ((dualhanding_two_weapons || MiscThings::is_werewolf()))
                                 chance = 0.49f;
@@ -16274,9 +16944,9 @@ namespace WalkerProcessor {
                 }
 
 
-
-
-                bool became_neutral_condition = was_enemy_from_start && !MiscThings::is_enemy_to_actor(target_ref) && !(target_ref->IsActor() && target_ref->IsDead());
+                
+                auto combat_condition = !(target_ref->IsActor() && ((RE::Actor*)target_ref)->combatController && (((RE::Actor*)target_ref)->combatController->startedCombat || ((RE::Actor*)target_ref)->combatController->IsFleeing())); //became neutral and stopped combat
+                bool became_neutral_condition = combat_condition && was_enemy_from_start && !MiscThings::is_enemy_to_actor(target_ref) && !(target_ref->IsActor() && target_ref->IsDead());
 
                 if (became_neutral_condition)
                 {
@@ -16611,23 +17281,37 @@ namespace WalkerProcessor {
                 auto temp_carry_item_item_carried = carry_item_item_carried;
                 auto temp_carry_item_item_to_walk_to = carry_item_item_to_walk_to;
                 auto temp_carry_item_drop_position = carry_item_drop_position;
+                auto temp_carry_item_item_carried_specific_item = carry_item_item_carried_specific_item;
+                auto temp_carry_item_context_given1 = carry_item_context_given1;
+                auto temp_carry_item_context_given2 = carry_item_context_given2;
 
                 auto temp = walk_to_object_by_refr(carry_item_item_to_walk_to, 1);
 
+                carry_item_item_carried_specific_item = temp_carry_item_item_carried_specific_item;
                 carry_item_instead_of_interaction = temp_carry_item_instead_of_interaction;
                 carry_item_keep_carrying = temp_carry_item_keep_carrying;
                 carry_item_item_carried = temp_carry_item_item_carried;
                 carry_item_item_to_walk_to = temp_carry_item_item_to_walk_to;
                 carry_item_drop_position = temp_carry_item_drop_position;
+                carry_item_context_given1 = temp_carry_item_context_given1;
+                carry_item_context_given2 = temp_carry_item_context_given2;
 
                 carry_item_keep_carrying = true;
 
-                auto carry_item_name = MiscThings::insert_object_into_list_and_get_info(carry_item_item_carried);
 
-                if (temp.first)
-                    send_random_context("You grab " + carry_item_name + "...", true);
-                else
-                    send_random_context("Cannot grab this item for some reason", false);
+
+                if (!carry_item_context_given2)
+                {
+                    auto carry_item_name = MiscThings::insert_object_into_list_and_get_info(carry_item_item_carried);
+
+                    if (temp.first)
+                        send_random_context("You grab " + carry_item_name + "...", true);
+                    else
+                        send_random_context("Cannot grab this item for some reason", false);
+
+                    carry_item_context_given2 = true;
+                }
+
                 
                 
 
@@ -17086,6 +17770,79 @@ namespace WalkerProcessor {
                                     }
                                 }
 
+
+                                if (target_ref)
+                                {
+                                    switch (target_ref->formID)
+                                    {
+                                    case (0x401ad31):
+                                    case (0x401ad2f):
+                                    case (0x4025a86):
+                                    case (0x402a567):
+                                    case (0x4025a83):
+                                    case (0x401ad32):
+                                    case (0x402a563):
+                                    {
+                                        if (vahlok_tomb_advice_received && !Observer::is_puzzle_scanner_paused())
+                                        {
+                                            auto vahlok_quest = (RE::TESQuest*)RE::TESForm::LookupByID(0x4019b4a);
+                                            if (vahlok_quest)
+                                            {
+                                                if (!MiscThings::GetStageDone(vahlok_quest, 305))
+                                                {
+                                                    auto draugr_to_drag = target_ref;
+                                                    reset_walker();
+                                                    reset_backup_pickup();
+                                                    Observer::set_quest_puzzle_type(7); //vahloks tomb draugrill
+                                                    Observer::set_puzzle_target(draugr_to_drag);
+                                                    return true;
+                                                }
+
+
+                                            }
+                                        }
+
+                                        break;
+                                    }
+
+                                    case (0x38c6f): //orc for dark brotherhood (balagog), carry body to hiding place. only if dead. only if quest phase allows it
+                                    {
+                                        auto drag_orc_quest = (RE::TESQuest*)RE::TESForm::LookupByEditorID("DB08");
+
+                                        if (drag_orc_quest && drag_orc_quest->currentStage == 30)
+                                        {
+                                            auto objective = MiscThings::get_quest_objective_by_index(drag_orc_quest, 15);
+                                            if (objective)
+                                                if (objective->state.all(RE::QUEST_OBJECTIVE_STATE::kDisplayed) && !objective->state.all(RE::QUEST_OBJECTIVE_STATE::kCompletedDisplayed) && !objective->state.all(RE::QUEST_OBJECTIVE_STATE::kFailedDisplayed))
+                                                {
+                                                    //objective is up
+                                                    if (!Observer::is_puzzle_scanner_paused())
+                                                    {
+                                                        auto body_to_drag = target_ref;
+                                                        reset_walker();
+                                                        reset_backup_pickup();
+                                                        Observer::set_quest_puzzle_type(13); //hide orc's body for dark brotherhood
+                                                        Observer::set_puzzle_target(body_to_drag);
+                                                        return true;
+                                                    }
+                                                }
+                                        }
+                                    }
+
+                                    case (0x401adc9): //small keyhole gate in middle room before blue platform puzzzle
+                                    {
+
+
+
+                                        break;
+                                    }
+
+
+                                    }
+                                }
+
+
+
                                 auto mzulft_crystal_pickup_fake = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x7029a55);
 
                                 if (target_ref == mzulft_crystal_pickup_fake)
@@ -17507,6 +18264,101 @@ namespace WalkerProcessor {
                 target_name = MiscThings::insert_object_into_list_and_get_info(target_ref);
                 if (quest_mode && (target_name == "")) //not guaranteed that insert_object will give us a name
                     target_name = "quest target point";
+
+                if (target_ref && target_ref->formID == 0x401adc9) //vahloks tomb. 2 keyholes gate before floating platforms puzzle
+                {
+                    auto vahlok_quest = (RE::TESQuest*)RE::TESForm::LookupByID(0x4019b4a);
+                    if (vahlok_quest && !MiscThings::GetStageDone(vahlok_quest, 330))
+                    {
+                        
+
+                        auto keyhole1 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4025033);
+                        auto keyhole2 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4025037);
+
+                        if (keyhole1 && keyhole2)
+                        {
+                            auto info_keyholes = MiscThings::insert_object_into_list_and_get_info(keyhole1) + "\n" + MiscThings::insert_object_into_list_and_get_info(keyhole2);
+                            send_random_context("A gate is blocking the path. You see 2 keyholes next to it, maybe the Left and Right halves of Claw you just found can fit in them:\n" + info_keyholes, false);
+                        }
+
+                        reset_walker();
+                        return "";
+                    }
+                }
+
+
+                if (target_ref && target_ref->formID == 0x4032234) //vahloks tomb. big pillar puzzle 3
+                {
+                    auto activator_red = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4017377);
+                    auto activator_green = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4017378);
+                    auto activator_blue = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4017379);
+
+                    if (activator_red && activator_green && activator_blue)
+                    {
+                        auto info_red = MiscThings::insert_object_into_list_custom_name(" Red Glowing Stone", activator_red);
+                        auto info_green = MiscThings::insert_object_into_list_custom_name(" Green Glowing Stone", activator_green);
+                        auto info_blue = MiscThings::insert_object_into_list_custom_name(" Blue Glowing Stone", activator_blue);
+
+
+                        // Tharstan told you, that tablet here says: All men must die, often by their own means...
+
+                        send_random_context("Looks like another puzzle... Tharstan told you, that tablet here says: All men must die, often by their own means... You see Big Central pillar, with 3 stones around it: " + info_red + "; " + info_green + "; " + info_blue +". There are also pedestals with weapons in front of each stone : Red has sword, Green has bow, Blue has staff...", false);
+
+                        reset_walker();
+
+                        return "";
+                    }
+
+                }
+
+                if (target_ref && target_ref->formID == 0x4025aa3) //vahloks tomb. draugrill xmarker
+                {
+                    bool has_draugr_on_gate = false;
+
+                    RE::TES::GetSingleton()->ForEachReferenceInRange(target_ref, 100.0f,
+                        [&](RE::TESObjectREFR* a_ref) {
+
+                            if (a_ref && !a_ref->IsDisabled())
+                            {
+                                if (a_ref->IsActor())
+                                {
+                                    if (a_ref->IsDead())
+                                    {
+                                        has_draugr_on_gate = true;
+                                        return RE::BSContainer::ForEachResult::kStop;
+                                    }
+                                }
+                            }
+                            return RE::BSContainer::ForEachResult::kContinue;
+                        });
+
+
+                    if (has_draugr_on_gate)
+                    {
+                        reset_walker();
+
+                        std::string handle_name = "";
+                        auto tablet_handle = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x401ad2a);
+                        if (tablet_handle)
+                            handle_name = MiscThings::insert_object_into_list_and_get_info(tablet_handle);
+
+                        vahlok_tomb_advice_received = true;
+
+                        send_random_context("You put a corpse on top of Metal Gate... If gate opens, corpse will fall into the fire. You remember a handle, that you saw earlier under ancient tablet: " + handle_name, false);
+                        return "";
+                    }
+                    else
+                    {
+                        vahlok_tomb_advice_received = true;
+
+                        reset_walker();
+                        send_random_context("You walked up to some Metal Floor Gate, covering a pit of fire... Tharstan told you that ancient tablet said: A sacrifice will bring you closer to that which you seek... Looks like a puzzle", false);
+                        return "";
+                    }
+
+
+                }
+
 
                 if (target_ref && target_ref->formID == 0xb7465) //saartal glowing wall with amulet
                 {
@@ -18804,10 +19656,10 @@ namespace WalkerProcessor {
 
             dont_replace_with_shout |= inanimate || target_is_dead;
 
-            if (!dont_replace_with_shout && MiscThings::is_offensive_spell(spell))
-                return walk_to_object_by_index(MiscThings::get_object_by_refr(target), 3);
+            if (MiscThings::is_offensive_spell(spell))
+                return walk_to_object_by_index(MiscThings::get_object_by_refr(target), 3, dont_replace_with_shout);
             else
-                return walk_to_object_by_refr(target, 3);
+                return walk_to_object_by_refr(target, 3, false, "", false);
 
                 //walk_to_object_by_refr(target, 3);
         }
@@ -19314,7 +20166,7 @@ namespace WalkerProcessor {
 
 
 
-    void drop_some_item_onto_position(RE::NiPoint3 pos_to_drop, RE::TESObjectREFR* object_to_walk_to)
+    void drop_some_item_onto_position(RE::NiPoint3 pos_to_drop, RE::TESObjectREFR* object_to_walk_to, RE::TESObjectREFR* specific_object)
     {
         if (MiscThings::is_objects_around_valid())
         {
@@ -19327,14 +20179,23 @@ namespace WalkerProcessor {
                 float min_dist = FLT_MAX;
                 RE::TESObjectREFR* nearest_object = nullptr;
 
-                for (auto& object : *object_list)
+
+                if (specific_object)
                 {
-                    if (object.second.object && object.second.object->GetBaseObject() && object.second.object->GetBaseObject()->IsInventoryObject())
+                    carry_item_item_carried_specific_item = specific_object;
+                    nearest_object = specific_object;
+                }
+                else
+                {
+                    for (auto& object : *object_list)
                     {
-                        if (player->GetDistance(object.second.object) < min_dist)
+                        if (object.second.object && object.second.object->GetBaseObject() && object.second.object->GetBaseObject()->IsInventoryObject())
                         {
-                            min_dist = player->GetDistance(object.second.object);
-                            nearest_object = object.second.object;
+                            if (player->GetDistance(object.second.object) < min_dist)
+                            {
+                                min_dist = player->GetDistance(object.second.object);
+                                nearest_object = object.second.object;
+                            }
                         }
                     }
                 }
@@ -19346,11 +20207,27 @@ namespace WalkerProcessor {
                     carry_item_item_carried = nearest_object;
                     carry_item_item_to_walk_to = object_to_walk_to;
                     carry_item_drop_position = pos_to_drop;
+                    auto temp_carry_item_context_given1 = carry_item_context_given1;
+                    auto temp_carry_item_context_given2 = carry_item_context_given2;
                     walk_to_object_by_refr(nearest_object, 1);
 
+                    
                     auto carry_item_name = MiscThings::insert_object_into_list_and_get_info(carry_item_item_carried);
-                    send_random_context("You walk to " + carry_item_name + "...", true);
+                    if (!temp_carry_item_context_given1)
+                    {
+                        send_random_context("You walk to " + carry_item_name + "...", true);
+                        carry_item_context_given1 = true;
+                        carry_item_context_given2 = temp_carry_item_context_given2;
 
+                    }
+                    else
+                    {
+                        carry_item_context_given1 = temp_carry_item_context_given1;
+                        carry_item_context_given2 = temp_carry_item_context_given2;
+                    }
+                    
+
+                    reset_inactive_timer();
                 }
                 else
                 {
@@ -19457,7 +20334,7 @@ namespace WalkerProcessor {
 
         lock_camera_used_this_cycle = false;
 
-        Hooks::add_debug_line("walker_processor called", true);
+        //Hooks::add_debug_line("walker_processor called", true);
 
 
         //if (target_ref)
@@ -19544,9 +20421,10 @@ namespace WalkerProcessor {
 
                         auto target_object_where_to_drop = carry_item_item_to_walk_to;
                         auto target_object_drop_pos = carry_item_drop_position;
+                        auto target_object_to_drop = carry_item_item_carried_specific_item;
                         reset_walker();
 
-                        drop_some_item_onto_position(target_object_drop_pos, target_object_where_to_drop);
+                        drop_some_item_onto_position(target_object_drop_pos, target_object_where_to_drop, target_object_to_drop);
 
                         return;
 
@@ -19568,9 +20446,11 @@ namespace WalkerProcessor {
 
 
 
-        if (Observer::get_keep_distance_mode() && interaction_after_walk == 3 && target_ref && !shout_mode && !spell_mode && !is_walking_important_path())
+        if ((Observer::get_keep_distance_mode() || try_to_switch_to_nearest_enemy) && interaction_after_walk == 3 && target_ref && !shout_mode && !spell_mode && !is_walking_important_path())
         {
             //switch to nearest enemy if we are in keep-distance mode. necessary for better keep distance combat in case initial target hides behind other enemies
+
+            try_to_switch_to_nearest_enemy = false;
 
             if (player->GetDistance(target_ref) > 222.0f)
             {
@@ -19657,7 +20537,11 @@ namespace WalkerProcessor {
                                 threshold = 700.0f;
 
                             if (test_range < 200.0f)
-                                threshold = 200.0f;
+                                if (MiscThings::has_spell_equipped(get_current_active_hand()))
+                                    threshold = test_range;
+                                else
+                                    test_range = 200.0f;
+
 
                             if (distance < threshold && !(MiscThings::target_cant_attack(target_ref)) && close_enough())
                             {
@@ -20520,7 +21404,7 @@ namespace WalkerProcessor {
 
                                 attack_friend_confirmed = true;
 
-                                auto for_context = walk_to_object_by_index(attack_friend_id, attack_friend_interaction);
+                                auto for_context = walk_to_object_by_index(attack_friend_id, attack_friend_interaction, true);
 
                                 trying_to_attack_friend = false;
                                 attack_friend_request_sent = false;
@@ -20623,11 +21507,48 @@ namespace WalkerProcessor {
                 if (target_ref)
                     my_handle = target_ref->GetHandle();
 
-                if (target_ref && (!my_handle || !my_handle.get() || !my_handle.get().get()))
+                if (target_ref && (!my_handle || !my_handle.get() || !my_handle.get().get() || !my_handle.get().get()->data.objectReference))
                 {
+                    if (grab_info_given)
+                        send_random_context("You grabbed the item using Telekinesis", false);
+
                     reset_walker();
                     return;
                 }
+
+
+                if (target_ref && MiscThings::is_fishing_supplies(target_ref->GetBaseObject())) //fishing supplies
+                {
+                    auto now = std::chrono::steady_clock::now().time_since_epoch().count();
+                    float delta_equip = (double)(now - last_time_equipped_rod) / 1000000000.0;
+                    if (delta_equip > 5.0f)
+                    {
+                        if (player->GetDistance(target_ref) < 500.0f)
+                        {
+                            if (!MiscThings::has_fishing_rod_equipped())
+                            {
+                                auto fishing_rod_to_equip = MiscThings::get_random_fishing_rod_from_inventory();
+
+                                if (fishing_rod_to_equip)
+                                {
+                                    auto actor_equip = RE::ActorEquipManager::GetSingleton();
+                                    if (actor_equip)
+                                    {
+                                        actor_equip->EquipObject(player, fishing_rod_to_equip);
+
+                                        send_random_context("You equip your fishing rod...", true);
+
+                                        last_time_equipped_rod = now;
+                                    }
+
+                                }
+                            }
+                        }
+                    }
+
+                }
+
+
 
 
                 if (target_ref && interaction_after_walk == 3 && !(is_running_away() && !tactical_retreat_mode_active))
@@ -20688,8 +21609,6 @@ namespace WalkerProcessor {
                     }
                     reset_walker();
                 }
-
-
 
 
                 if (!point_of_no_return_choice_defined && target_ref && target_ref->formID == 0x45921 && interaction_after_walk != 3)
@@ -20817,14 +21736,14 @@ namespace WalkerProcessor {
                 {
                     if (player->GetDistance(target_ref) < 1000.0f && !detect_stuck(dtime))
                     {
-                        lock_camera_onto_target(target_ref, 0.5f);
+                        lock_camera_onto_target(target_ref, dtime, 0.5f);
                         cursor_down(); 
                         //go back and stare at him a little
                         return;
                     }
                     else
                     {
-                        if (lock_camera_onto_target(target_ref, 0.5f))
+                        if (lock_camera_onto_target(target_ref, dtime, 0.5f))
                         {
                             if (!alduin_stare_notified)
                             {
@@ -20934,9 +21853,616 @@ namespace WalkerProcessor {
                 }
 
 
+                if (using_custom_path && parent_cell && parent_cell->formID == 0x40142ef) //vahlok tomb. walking on floating platforms
+                {
+                    if (player->GetPositionZ() < -500.0f && check_custom_path_for_fall)
+                    {
+                        send_random_context("You fall down into pit, landing on water!", false);
+                        register_allowed_actions();
+                        reset_walker();
+                        return;
+                    }
+
+                    if (target_ref)
+                    {
+                        std::vector<uint32_t> platforms1 = {
+                            0x401add1,
+                            0x401add5,
+                            0x401add6,
+                            0x401add7,
+                            0x401add8,
+                            0x401add9,
+                            0x401adda,
+                            0x401addb,
+                            0x401addc,
+                            0x401addd,
+                            0x401adde,
+                            0x401addf
+                        };
+
+                        for (int i = 0; i < std::size(platforms1) - 1; i++)
+                        {
+                            if (target_ref->formID == platforms1.at(i))
+                            {
+                                auto next_platform = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(platforms1.at(i + 1));
+                                if (next_platform && (!next_platform->IsDisabled() || (dont_wait_platform_special_vahlok && player->GetDistance(target_ref) < 120.0f)))
+                                {
+                                    auto player_pos = player->GetPosition();
+                                    auto next_platform_pos = next_platform->GetPosition();
+                                    walk_again();
+                                    target_ref = next_platform;
+                                    have_target_to_walk = true;
+                                    using_custom_path = true;
+                                    custom_path = { player_pos, next_platform_pos };
+                                    path = custom_path;
+                                    path_valid = true;
+                                    dont_quicksave_after_custom_path = true;
+                                    hold_camera_horizontally_a_bit_down_while_walking = true;
+                                    check_custom_path_for_fall = true;
+                                    return;
+                                }
+                                else
+                                {
+                                    if (!dont_wait_platform_special_vahlok)
+                                        if (player->GetDistance(target_ref) < 100.0f)
+                                            return; //wait
+                                }
+                            }
+                        }
+
+                        if (target_ref->formID == platforms1.at(std::size(platforms1) - 1))
+                        {
+                            //last platform
+                            if (player->GetDistance(target_ref) < 100.0f)
+                            {
+                                auto player_pos = player->GetPosition();
+                                
+                                walk_again();
+
+                                auto dummy = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x70c1a25);
+                                if (dummy)
+                                {
+                                    dummy->MoveTo(player);
+                                    RE::NiPoint3 finish_point = { 9188.64551, -3394.22388, -141.420807 };
+                                    MiscThings::SetPosition_moveto(dummy, finish_point);
+                                    target_ref = dummy;
+                                    have_target_to_walk = true;
+                                    using_custom_path = true;
+                                    custom_path = { player_pos, finish_point };
+                                    path = custom_path;
+                                    path_valid = true;
+                                    dont_quicksave_after_custom_path = true;
+                                    return;
+                                }
+                            }
+                        }
+
+
+
+                        std::vector<uint32_t> platforms2 = {
+                            0x4024be4,
+                            0x4024bb1,
+                            0x4024bb2,
+                            0x4024bb3,
+                            0x4024bb4,
+                            0x4024bb5,
+                            0x4024bb6,
+                            0x4024bb7,
+                            0x4024bb8,
+                            0x4024bb9,
+                            0x4024bba
+                        };
+
+                        for (int i = 0; i < std::size(platforms2) - 1; i++)
+                        {
+                            if (target_ref->formID == platforms2.at(i))
+                            {
+                                auto next_platform = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(platforms2.at(i + 1));
+                                if (next_platform && (!next_platform->IsDisabled() || (dont_wait_platform_special_vahlok && player->GetDistance(target_ref) < 120.0f)))
+                                {
+                                    auto player_pos = player->GetPosition();
+                                    auto next_platform_pos = next_platform->GetPosition();
+                                    walk_again();
+                                    target_ref = next_platform;
+                                    have_target_to_walk = true;
+                                    using_custom_path = true;
+                                    custom_path = { player_pos, next_platform_pos };
+                                    path = custom_path;
+                                    path_valid = true;
+                                    dont_quicksave_after_custom_path = true;
+                                    hold_camera_horizontally_a_bit_down_while_walking = true;
+                                    check_custom_path_for_fall = true;
+                                    return;
+                                }
+                                else
+                                {
+                                    if (!dont_wait_platform_special_vahlok)
+                                        if (player->GetDistance(target_ref) < 100.0f)
+                                            return; //wait
+                                }
+                            }
+                        }
+
+                        if (target_ref->formID == platforms2.at(std::size(platforms2) - 1))
+                        {
+                            //last platform
+                            if (player->GetDistance(target_ref) < 100.0f)
+                            {
+                                auto player_pos = player->GetPosition();
+
+                                walk_again();
+
+                                auto dummy = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x70c1a25);
+                                if (dummy)
+                                {
+                                    dummy->MoveTo(player);
+                                    RE::NiPoint3 finish_point = { 8152.24219, -6572.44629, -238.289505 };
+                                    MiscThings::SetPosition_moveto(dummy, finish_point);
+                                    target_ref = dummy;
+                                    have_target_to_walk = true;
+                                    using_custom_path = true;
+                                    custom_path = { player_pos, finish_point };
+                                    path = custom_path;
+                                    path_valid = true;
+                                    dont_quicksave_after_custom_path = true;
+                                    return;
+                                }
+                            }
+                        }
+
+
+
+
+
+                        std::vector<uint32_t> platforms3 = {
+                            0x4024bee,
+                            0x4024bbb,
+                            0x4024bbc,
+                            0x4024bbd,
+                            0x4024bbe,
+                            0x4024bbf,
+                            0x4024bc0,
+                            0x4024bc1,
+                            0x4024bc2,
+                            0x4024bc3,
+                            0x4024bc4,
+                            0x4024bc5,
+                            0x4024bc6,
+                            0x4024bc7,
+                            0x4024bc8,
+                            0x4024bc9,
+                            0x4024bca,
+                            0x4024bcb,
+                            0x4024bcc
+                        };
+
+                        for (int i = 0; i < std::size(platforms3) - 1; i++)
+                        {
+                            if (target_ref->formID == platforms3.at(i))
+                            {
+                                auto next_platform = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(platforms3.at(i + 1));
+                                if (next_platform && (!next_platform->IsDisabled() || (dont_wait_platform_special_vahlok && player->GetDistance(target_ref) < 120.0f)))
+                                {
+                                    auto player_pos = player->GetPosition();
+                                    auto next_platform_pos = next_platform->GetPosition();
+                                    walk_again();
+                                    target_ref = next_platform;
+                                    have_target_to_walk = true;
+                                    using_custom_path = true;
+                                    custom_path = { player_pos, next_platform_pos };
+                                    path = custom_path;
+                                    path_valid = true;
+                                    dont_quicksave_after_custom_path = true;
+                                    hold_camera_horizontally_a_bit_down_while_walking = true;
+                                    check_custom_path_for_fall = true;
+                                    return;
+                                }
+                                else
+                                {
+                                    if (!dont_wait_platform_special_vahlok)
+                                        if (player->GetDistance(target_ref) < 100.0f)
+                                            return; //wait
+                                }
+                            }
+                        }
+
+                        if (target_ref->formID == platforms3.at(std::size(platforms3) - 1))
+                        {
+                            //last platform
+                            if (player->GetDistance(target_ref) < 100.0f)
+                            {
+                                auto player_pos = player->GetPosition();
+
+                                walk_again();
+
+                                auto dummy = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x70c1a25);
+                                if (dummy)
+                                {
+                                    dummy->MoveTo(player);
+                                    RE::NiPoint3 finish_point = { 5862.13623, -7802.29980, -274.239746 };
+                                    MiscThings::SetPosition_moveto(dummy, finish_point);
+                                    target_ref = dummy;
+                                    have_target_to_walk = true;
+                                    using_custom_path = true;
+                                    custom_path = { player_pos, finish_point };
+                                    path = custom_path;
+                                    path_valid = true;
+                                    dont_quicksave_after_custom_path = true;
+                                    return;
+                                }
+                            }
+                        }
+
+
+
+                        std::vector<uint32_t> platforms4 = {
+                            0x4024bf4,
+                            0x4024bd3,
+                            0x4024bd4,
+                            0x4024bd5,
+                            0x4024bd6,
+                            0x4024bd7,
+                            0x4024bd8,
+                            0x4024bd9,
+                            0x4024bda,
+                            0x4024bdb,
+                            0x4024bdc,
+                            0x4024bdd,
+                            0x4024bde,
+                            0x4024bdf,
+                            0x4024be0,
+                            0x4024be1,
+                            0x4024be2
+                        };
+
+                        for (int i = 0; i < std::size(platforms4) - 1; i++)
+                        {
+                            if (target_ref->formID == platforms4.at(i))
+                            {
+                                auto next_platform = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(platforms4.at(i + 1));
+                                if (next_platform && (!next_platform->IsDisabled() || (dont_wait_platform_special_vahlok && player->GetDistance(target_ref) < 120.0f)))
+                                {
+                                    auto player_pos = player->GetPosition();
+                                    auto next_platform_pos = next_platform->GetPosition();
+                                    walk_again();
+                                    target_ref = next_platform;
+                                    have_target_to_walk = true;
+                                    using_custom_path = true;
+                                    custom_path = { player_pos, next_platform_pos };
+                                    path = custom_path;
+                                    path_valid = true;
+                                    dont_quicksave_after_custom_path = true;
+                                    hold_camera_horizontally_a_bit_down_while_walking = true;
+                                    check_custom_path_for_fall = true;
+                                    return;
+                                }
+                                else
+                                {
+                                    if (!dont_wait_platform_special_vahlok)
+                                        if (player->GetDistance(target_ref) < 100.0f)
+                                            return; //wait
+                                }
+                            }
+                        }
+
+                        if (target_ref->formID == platforms4.at(std::size(platforms4) - 1))
+                        {
+                            //last platform
+                            if (player->GetDistance(target_ref) < 100.0f)
+                            {
+                                auto player_pos = player->GetPosition();
+
+                                walk_again();
+
+                                auto dummy = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x70c1a25);
+                                if (dummy)
+                                {
+                                    dummy->MoveTo(player);
+                                    RE::NiPoint3 finish_point = { 3187.33838, -8967.62500, -278.478088 };
+                                    MiscThings::SetPosition_moveto(dummy, finish_point);
+                                    target_ref = dummy;
+                                    have_target_to_walk = true;
+                                    using_custom_path = true;
+                                    custom_path = { player_pos, finish_point };
+                                    path = custom_path;
+                                    path_valid = true;
+                                    dont_quicksave_after_custom_path = true;
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                }
+
                 
                 if (target_ref && target_ref->formID == 0x70c1a25) //dummy from apocrypha. reused in other dungeons
                 {
+                    if (parent_cell && parent_cell->formID == 0xa0877) //skuldafn bridge levers pillars
+                    {
+                        if (target_ref->GetPosition().GetDistance({ -414.847260, 11800.7383, 1854.62122 }) < 100.0f)
+                        {
+                            if (player->GetDistance(target_ref) < 200.0f)
+                            {
+                                auto pillar1 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0xa7596);
+                                auto pillar2 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0xa7593);
+                                auto pillar3 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0xa7597);
+                                auto lever = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0xf13b2);
+                                auto bridge = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0xa751d);
+
+                                auto temp_info = MiscThings::insert_object_into_list_and_get_info(pillar1);
+                                temp_info = MiscThings::insert_object_into_list_and_get_info(pillar2);
+                                temp_info = MiscThings::insert_object_into_list_and_get_info(pillar3);
+                                temp_info = MiscThings::insert_object_into_list_and_get_info(lever);
+                                temp_info = MiscThings::insert_object_into_list_and_get_info(bridge);
+
+
+                                send_random_context(temp_info + " blocks the path... you see a lever and pillars nearby. Looks like a puzzle", false);
+                                reset_walker();
+                                return;
+                            }
+                        }
+                    }
+
+                    if (parent_cell && parent_cell->formID == 0x40142ee) //dlc2 unearthed quest, puzzles
+                    {
+                        if (target_ref->GetPosition().GetDistance({ -1988.63831, 1250.27991, 1726.88306 }) < 100.0f) //phase2
+                        {
+                            if (player->GetDistance(target_ref) < 150.0f)
+                            {
+                                auto gate1 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4027a71);
+                                auto gate2 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4027a72);
+                                auto gate3 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4020d4b);
+
+                                auto handle1 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4027a6e);
+                                auto handle2 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4027a6f);
+                                auto handle3 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4027a70);
+                                auto handle4 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x40289af);
+
+                                if (gate1 && gate2 && gate3 && handle1 && handle2 && handle3 && handle4)
+                                {
+                                    bool gate1_closed = MiscThings::two_state_activator_state(gate1) == 1;
+                                    bool gate2_closed = MiscThings::two_state_activator_state(gate2) == 1;
+                                    bool gate3_closed = MiscThings::two_state_activator_state(gate3) == 1;
+
+
+                                    if (gate1_closed || gate2_closed || gate3_closed)
+                                    {
+                                        std::string info_gate1 = gate1_closed ? MiscThings::insert_object_into_list_and_get_info(gate1) + "; " : "";
+                                        std::string info_gate2 = gate2_closed ? MiscThings::insert_object_into_list_and_get_info(gate2) + "; " : "";
+                                        std::string info_gate3 = gate3_closed ? MiscThings::insert_object_into_list_and_get_info(gate3) + "; " : "";
+
+                                        auto info_handle1 = MiscThings::insert_object_into_list_and_get_info(handle1) + "; ";
+                                        auto info_handle2 = MiscThings::insert_object_into_list_and_get_info(handle2) + "; ";
+                                        auto info_handle3 = MiscThings::insert_object_into_list_and_get_info(handle3) + "; ";
+                                        auto info_handle4 = MiscThings::insert_object_into_list_and_get_info(handle4) + "; ";
+
+                                        send_random_context("There are closed gates, that block the way: " + info_gate1 + info_gate2 + info_gate3 + ". And four handles: " + info_handle1 + info_handle2 + info_handle3 + info_handle4 + "... Looks like a puzzle...", false);
+                                        reset_walker();
+                                        return;
+
+                                    }
+                                }
+                            }
+                        }
+
+
+                        if (target_ref->GetPosition().GetDistance({ -3472.58105, -3205.05225, 1118.22668 }) < 100.0f) //phase3. ask player if he wants to do the puzzle
+                        {
+                            if (player->GetDistance(target_ref) < 150.0f)
+                            {
+                                Observer::set_quest_puzzle_type(14);
+                                reset_walker();
+                                return;
+                            }
+                        }
+
+
+                    }
+
+
+
+                    if (parent_cell && parent_cell->formID == 0x40142f4) //black book 5 (nelot's house)
+                    {
+                        if (target_ref->GetPosition().GetDistance({ 15650.4766, 1119.19653, 794.739136 }) < 100.0f)
+                        {
+                            //choose book in the end of book5 zone3
+                            if (player->GetDistance(target_ref) < 150.0f)
+                            {
+                                auto book1 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4020413);
+                                auto book2 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x401e6d1);
+
+                                if (book1 && book2)
+                                {
+                                    auto info1 = MiscThings::insert_object_into_list_and_get_info(book1);
+                                    auto info2 = MiscThings::insert_object_into_list_and_get_info(book2);
+
+                                    send_random_context("You see two book-portals in front of you... you have to choose one: " + info1 + "; " + info2, false);
+                                    reset_walker();
+                                    return;
+                                }
+                            }
+                        }
+
+                        if (target_ref->GetPosition().GetDistance({ 10258.9717, -3648.93262, 42.3474922 }) < 100.0f)
+                        {
+                            //choose book in the end of book5 zone5
+                            if (player->GetDistance(target_ref) < 150.0f)
+                            {
+                                auto book1 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4020471);
+                                auto book2 = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x402046f);
+
+                                if (book1 && book2)
+                                {
+                                    auto info1 = MiscThings::insert_object_into_list_and_get_info(book1);
+                                    auto info2 = MiscThings::insert_object_into_list_and_get_info(book2);
+
+                                    send_random_context("You see two book-portals in front of you... you have to choose one: " + info1 + "; " + info2, false);
+                                    reset_walker();
+                                    return;
+                                }
+                            }
+                        }
+
+                        if (target_ref->GetPosition().GetDistance({ 10802.1963, -5726.51465, 172.429199 }) < 100.0f)
+                        {
+                            //choose book in the end of book5 zone7
+                            if (player->GetDistance(target_ref) < 150.0f)
+                            {
+                                send_random_context("You stand in front of pit, with an Apocrypha Bridge over it, but the bridge is currently rolled up, and you cannot walk on it... You dont see any activators nearby, probably need to go back", false);
+                                Apocrypha::set_book5_bridge_known();
+                                reset_walker();
+                                return;
+                            }
+                        }
+
+
+                    }
+
+
+                    if (parent_cell && parent_cell->formID == 0x40142ef) //vahlok tomb dlc2 lost legacy quest floating platforms
+                    {
+                        auto target_ref_pos = target_ref->GetPosition();
+
+                        RE::NiPoint3 dummy_pos_start_part_1 = { 9173.54004, -1701.36243, 3.80842280 };
+
+                        if (target_ref_pos.GetDistance(dummy_pos_start_part_1) < 100.0f) //first platform section
+                        {
+                            if (player->GetDistance(target_ref) < 150.0f)
+                            {
+                                auto lookat_gate = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x401acf5);
+                                auto launch_handle = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x401add0);
+
+                                if (lookat_gate && launch_handle)
+                                {
+                                    auto handle_info = MiscThings::insert_object_into_list_and_get_info(launch_handle);
+
+                                    if (!get_vahlok_saw_platforms(1))
+                                    {
+                                        auto first_platform = (RE::TESObjectREFR*)RE::TESForm::LookupByID(0x401add1);
+                                        if (first_platform && first_platform->IsDisabled())
+                                            send_random_context("You stand in front of large pit, with water at the bottom... It is so large, you cant jump over it or fly across using your shouts... Tharstan said, the tablet here said: Stay your course. To idle is to die... There was some handle under the tablet, maybe it is somehow connected to the puzzle: " + handle_info, false);
+                                        else
+                                        {
+                                            set_vahlok_saw_platforms(1);
+                                            send_random_context("After you pulled the " + handle_info + ", some platforms started appearing above the pit, making something that looks like path. But they quickly disappear, which means you cant stop when you walk on them... When you are ready, pull the handle again to try get over the pit using these platforms", false);
+                                        }    
+                                    }
+                                    else
+                                        send_random_context("You stand in front of pit. When you pulled the handle last time, some platforms appeared out of thin air, it looks like you can walk across the pit using these platforms... But they are gone now. Maybe, pull the handle again? " + handle_info, false);
+
+                                    look_at_object_by_refr(lookat_gate);
+                                    return;
+                                }
+
+                            }
+                        }
+
+                        RE::NiPoint3 dummy_pos_start_part_2 = { 9182.87402, -5049.63037, -164.473969 };
+                        if (target_ref_pos.GetDistance(dummy_pos_start_part_2) < 100.0f) //second platform section
+                        {
+                            if (player->GetDistance(target_ref) < 150.0f)
+                            {
+                                auto lookat_gate = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4024bf0);
+                                auto launch_handle = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4024be3);
+
+                                if (lookat_gate && launch_handle)
+                                {
+                                    auto handle_info = MiscThings::insert_object_into_list_and_get_info(launch_handle);
+
+                                    if (!get_vahlok_saw_platforms(2))
+                                    {
+                                        set_vahlok_saw_platforms(2);
+                                        send_random_context("You stand in front of another pit, and see a passage on the other side... It is probably similar to previous puzzle, here is new handle: " + handle_info, false);
+                                    }
+                                    else
+                                        send_random_context("You stand in front of pit. When you pulled the handle last time, some platforms appeared out of thin air, it looks like you can walk across the pit using these platforms... But they are gone now. Maybe, pull the handle again? " + handle_info, false);
+
+                                    look_at_object_by_refr(lookat_gate);
+                                    return;
+                                }
+
+                            }
+                        }
+
+
+                        RE::NiPoint3 dummy_pos_start_part_3 = { 7568.76074, -6767.94141, -118.531471 };
+                        if (target_ref_pos.GetDistance(dummy_pos_start_part_3) < 100.0f) //second platform section
+                        {
+                            if (player->GetDistance(target_ref) < 300.0f)
+                            {
+                                auto lookat_gate = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4024bf6);
+                                auto launch_handle = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4024bf0);
+
+                                if (lookat_gate && launch_handle)
+                                {
+                                    auto handle_info = MiscThings::insert_object_into_list_and_get_info(launch_handle);
+
+                                    if (!get_vahlok_saw_platforms(3))
+                                    {
+                                        set_vahlok_saw_platforms(3);
+                                        send_random_context("You stand in front of another pit, and see a passage on the other side... It is probably similar to previous puzzle, here is new handle: " + handle_info, false);
+                                    }
+                                    else
+                                        send_random_context("You stand in front of pit. When you pulled the handle last time, some platforms appeared out of thin air, it looks like you can walk across the pit using these platforms... But they are gone now. Maybe, pull the handle again? " + handle_info, false);
+
+                                    look_at_object_by_refr(lookat_gate);
+                                    return;
+                                }
+
+                            }
+                        }
+
+
+                        RE::NiPoint3 dummy_pos_start_part_4 = { 5852.50488, -8376.47656, -185.283752 };
+                        if (target_ref_pos.GetDistance(dummy_pos_start_part_4) < 100.0f) //second platform section
+                        {
+                            if (player->GetDistance(target_ref) < 150.0f)
+                            {
+                                auto lookat_gate = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4024b83);
+                                auto launch_handle = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0x4024bf6);
+
+                                if (lookat_gate && launch_handle)
+                                {
+                                    auto handle_info = MiscThings::insert_object_into_list_and_get_info(launch_handle);
+
+                                    if (!get_vahlok_saw_platforms(4))
+                                    {
+                                        set_vahlok_saw_platforms(4);
+                                        send_random_context("You stand in front of another pit, and see a passage on the other side... It is probably similar to previous puzzle, here is new handle: " + handle_info, false);
+                                    }
+                                    else
+                                        send_random_context("You stand in front of pit. When you pulled the handle last time, some platforms appeared out of thin air, it looks like you can walk across the pit using these platforms... But they are gone now. Maybe, pull the handle again? " + handle_info, false);
+
+                                    look_at_object_by_refr(lookat_gate);
+                                    return;
+                                }
+
+                            }
+                        }
+
+
+
+                        RE::NiPoint3 dummy_pos_finish_part_1 = { 9188.64551, -3394.22388, -141.420807 };
+                        RE::NiPoint3 dummy_pos_finish_part_2 = { 8152.24219, -6572.44629, -238.289505 };
+                        RE::NiPoint3 dummy_pos_finish_part_3 = { 5862.13623, -7802.29980, -274.239746 };
+                        RE::NiPoint3 dummy_pos_finish_part_4 = { 3187.33838, -8967.62500, -278.478088 };
+
+                        if (target_ref_pos.GetDistance(dummy_pos_finish_part_1) < 100.0f || //first platform section finish
+                            target_ref_pos.GetDistance(dummy_pos_finish_part_2) < 100.0f ||
+                            target_ref_pos.GetDistance(dummy_pos_finish_part_3) < 100.0f ||
+                            target_ref_pos.GetDistance(dummy_pos_finish_part_4) < 100.0f
+                            ) 
+                        {
+                            if (player->GetDistance(target_ref) < 150.0f)
+                            {
+                                register_allowed_actions();
+                                reset_walker();
+                                return;
+                            }
+                        }
+                    }
+
+
                     if (parent_cell && parent_cell->formID == 0x15280) //forlungur
                     {
                         if (player->GetPositionX() >= 5710.0f) //its the bridge
@@ -21053,6 +22579,20 @@ namespace WalkerProcessor {
 
 
 
+                    if (has_telekinesis_item_in_sight())
+                    {
+                        if (!grab_info_given)
+                        {
+                            grab_info_given = true;
+                            auto info = MiscThings::insert_object_into_list_and_get_info(target_ref);
+                            send_random_context("You grab " + info, true);
+                        }
+
+                        confirm();
+                    }
+
+
+
                     auto labyr_gate = (RE::TESObjectREFR*)RE::TESObjectREFR::LookupByID(0xf498c);
 
                     if (labyr_gate && test_targeted_ref == labyr_gate && target_ref && target_ref != labyr_gate)
@@ -21155,6 +22695,51 @@ namespace WalkerProcessor {
                         {
                             Observer::add_quicksave_timer(200.0f);
                         }
+                    }
+
+
+
+                    if (parent_cell->formID == 0x40142ee) //dlc2 unearthed, 
+                    {
+                        auto player_pos = player->GetPosition();
+                        if (target_ref->formID == 0x4027808) //ahzidal ring 2 (in the water well) grab
+                        {
+                            if (player->GetDistance(target_ref) > 150.0f)
+                            {
+                                if (target_ref->GetPosition().GetDistance({ -3456.26, -3689.05, 1085.77 }) < 30.0f && target_ref->modelState != 0 && !MiscThings::is_player_swimming() && player_pos.y > -3500.0f && player_pos.z > 941.0f) //untouched on the pedestal
+                                {
+                                    walk_again(); //soft reset
+                                    using_custom_path = true;
+                                    custom_path = CustomWalkerPaths::ahzidal_ring2_direct;
+                                    dont_quicksave_after_custom_path = true;
+                                    allow_interrupt_custom_walk = false;
+                                    walk_again_when_finished = true;
+                                    custom_path_must_jump_on_specific_point = true;
+                                    custom_path_jump_points = { 0 };
+                                    ban_custom_path_interrupt_after_append = true;
+                                    return;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            //escape
+                            if (!MiscThings::is_player_swimming() && player_pos.y < -3500.0f && player_pos.z > 941.0f)
+                            {
+                                walk_again(); //soft reset
+                                using_custom_path = true;
+                                custom_path = CustomWalkerPaths::ahzidal_ring2_reverse;
+                                dont_quicksave_after_custom_path = true;
+                                allow_interrupt_custom_walk = false;
+                                walk_again_when_finished = true;
+                                custom_path_must_jump_on_specific_point = true;
+                                custom_path_jump_points = { 1 };
+                                path_valid = true;
+                                path = custom_path;
+                                return;
+                            }
+                        }
+
                     }
 
 
@@ -21651,6 +23236,17 @@ namespace WalkerProcessor {
 
 
 
+                        if (apocrypha_redirects.jump_on_custom_path_point)
+                        {
+                            custom_path_must_jump_on_specific_point = true;
+                            custom_path_jump_points = apocrypha_redirects.custom_path_points_to_jump;
+                        }
+                        else
+                        {
+                            custom_path_must_jump_on_specific_point = false;
+                            custom_path_jump_points.clear();
+                        }
+
                         current_apocrypha_action = apocrypha_redirects.action;
                         return;
                     }
@@ -21873,6 +23469,9 @@ namespace WalkerProcessor {
                                             }
                                         }
 
+                                        bool dragon_low_hp = odahviing_actor->GetActorValue(RE::ActorValue::kHealth) / odahviing_actor->GetActorValueMax(RE::ActorValue::kHealth) < 0.4f;
+                                        dragonrent |= dragon_low_hp;
+
                                         if (!dragonrent && !shout_mode)
                                         {
                                             auto dragonrend = (RE::TESShout*)RE::TESForm::LookupByID(0x44250);
@@ -21913,6 +23512,9 @@ namespace WalkerProcessor {
                                                     break;
                                                 }
                                             }
+
+                                            bool dragon_low_hp = odahviing_actor->GetActorValue(RE::ActorValue::kHealth) / odahviing_actor->GetActorValueMax(RE::ActorValue::kHealth) < 0.4f;
+                                            dragonrent |= dragon_low_hp;
 
                                             if (dragonrent)
                                             {
@@ -23431,10 +25033,11 @@ namespace WalkerProcessor {
                         else
                         {
 
+                            //Hooks::add_debug_line("LOCK_CAMERA_ENTERED", true);
 
-                            if (seaching_dragon_land_spot)
+                            if (searching_dragon_land_spot)
                             {
-                                lock_camera_onto_target(target_ref, dtime, 0.5f);
+                                lock_camera_onto_target(target_ref, dtime, 0.5f, false, true);
                             }
 
 
@@ -23549,6 +25152,19 @@ namespace WalkerProcessor {
                                                     time_stuck = 0.0f;
                                                     try_unstuck = true;
                                                     unstuck_attempts++;
+
+                                                    if (unstuck_attempts > 1)
+                                                    {
+                                                        if (interaction_after_walk == 3 && !(is_running_away()) && MiscThings::is_werewolf())
+                                                        {
+                                                            auto temp_attackers = MiscThings::get_player_attackers(false, nullptr, true, 500.0f, true);
+                                                            if (std::size(temp_attackers) > 2)
+                                                            {
+                                                                try_to_switch_to_nearest_enemy = true; //this might not be quite as useful. needs adjustment
+                                                            }
+                                                        }
+                                                    }
+
                                                 }
                                                 else
                                                 {
@@ -23977,6 +25593,25 @@ namespace WalkerProcessor {
                                                                                     }
 
                                                                                     lock_camera_onto_target(target_ref, dtime, 0.5f);
+
+
+
+                                                                                    if (target_ref) //vahloks tomb. tablets. resetting after interaction
+                                                                                    {
+                                                                                        switch (target_ref->formID)
+                                                                                        {
+                                                                                        case (0x40347d1):
+                                                                                        case (0x40347d3):
+                                                                                        case (0x40347d4):
+                                                                                        case (0x40347d6):
+                                                                                        {
+                                                                                            reset_walker();
+                                                                                            return;
+                                                                                        }
+
+                                                                                        }
+                                                                                    }
+
 
                                                                                 }
                                                                                     
@@ -24567,9 +26202,21 @@ namespace WalkerProcessor {
                                                                                         {
                                                                                             if (pickup_wiggle_dir < 2)
                                                                                             {
-                                                                                                locking_failed = false;
-                                                                                                try_pickup_wiggle_body = true;
-                                                                                                return;
+                                                                                                if (pickup_wiggle_dir == 1 && !walked_again_before_second_pickup_wiggle)
+                                                                                                {
+                                                                                                    tried_to_come_closer = false;
+                                                                                                    locking_failed = false;
+                                                                                                    walked_again_before_second_pickup_wiggle = true;
+                                                                                                    walk_again();
+                                                                                                    return;
+                                                                                                }
+                                                                                                else
+                                                                                                {
+                                                                                                    locking_failed = false;
+                                                                                                    try_pickup_wiggle_body = true;
+                                                                                                    return;
+                                                                                                }
+
                                                                                             }
                                                                                         }
 
@@ -25192,6 +26839,13 @@ namespace WalkerProcessor {
                                         {
                                             if (!detect_stuck(dtime))
                                             {
+                                                auto test_enemy = test_enemy_blocks_another_enemy(dtime, target_ref);
+
+                                                if (test_enemy)
+                                                    try_to_switch_to_nearest_enemy = true;
+
+
+
                                                 std::string blocking_name = test_about_to_be_blocked_by_blocking(dtime);
 
                                                 if (blocking_name != "" && almost_stuck())
@@ -25257,6 +26911,19 @@ namespace WalkerProcessor {
                                                     time_stuck = 0.0f;
                                                     try_unstuck = true;
                                                     unstuck_attempts++;
+
+                                                    if (unstuck_attempts > 1)
+                                                    {
+                                                        if (interaction_after_walk == 3 && !(is_running_away()) && MiscThings::is_werewolf())
+                                                        {
+                                                            auto temp_attackers = MiscThings::get_player_attackers(false, nullptr, true, 500.0f, true);
+                                                            if (std::size(temp_attackers) > 2)
+                                                            {
+                                                                try_to_switch_to_nearest_enemy = true;
+                                                            }
+                                                        }
+                                                    }
+
                                                 }
                                                 else
                                                 {

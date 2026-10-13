@@ -29,7 +29,9 @@ namespace BarterProcessor {
     void update_place_timestamp(uint32_t place_formid, long long timestamp);
     RE::TESObjectREFR* get_trader_ref();
 
+    bool has_junk();
 
+    RE::TESBoundObject* get_bound_object_from_list_by_id(int id);
 
     std::pair<bool, std::string> set_barter_type(int in_type);
 

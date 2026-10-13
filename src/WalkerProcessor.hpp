@@ -75,8 +75,13 @@ namespace WalkerProcessor {
 
 	bool is_door(RE::TESObjectREFR* refr);
 
+	bool walk_custom_path(RE::TESObjectREFR* target_object, std::vector<RE::NiPoint3> positions, bool in_append_to_normal_path, bool in_walk_again_when_finished, bool in_dont_quicksave_after_walk, bool in_reset_after_walk, bool extra_precision, bool in_hold_camera_horizontally_a_bit_down_while_walking = false, bool in_check_custom_path_for_fall = false, bool must_shift = false, bool must_sprint = false, bool in_dont_wait_platform_special_vahlok = false);
+	void drop_some_item_onto_position(RE::NiPoint3 pos_to_drop, RE::TESObjectREFR* object_to_walk_to, RE::TESObjectREFR* specific_object = nullptr);
 
-	void drop_some_item_onto_position(RE::NiPoint3 pos_to_drop, RE::TESObjectREFR* object_to_walk_to);
+	float get_mouse_y_move_to_make_camera_horizotal();
+
+	void set_vahlok_saw_platforms(int num);
+	bool get_vahlok_saw_platforms(int num);
 
 	std::pair<bool, std::string> set_multiple_path_quest_choice(int id);
 
@@ -85,7 +90,7 @@ namespace WalkerProcessor {
 
 	std::pair<bool, std::string> walk_to_object_by_refr(RE::TESObjectREFR* target, int action, bool surrender_to_guards_mode = false, std::string custom_name = "", bool inc_barter_history_upon_arrival = false);
 
-	std::pair<bool, std::string> walk_to_object_by_index(int index, int interaction);
+	std::pair<bool, std::string> walk_to_object_by_index(int index, int interaction, bool dont_replace_with_shout = false);
 	std::pair<bool, std::string> walk_to_quest_by_index(int index, bool ignore_specified_target, bool skip_confirm = true, bool from_map = false);
 	std::pair<bool, std::string> look_at_object_by_index(int index);
 

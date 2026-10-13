@@ -45,6 +45,9 @@ float spell_cast_not_spell_timeout = 0.0f;
 float pause_pre_cast = 0.0f;
 
 float fishing_timer = 0.0f;
+bool fishing_gave_info_cast = false;
+bool fishing_gave_info_hooked = false;
+bool was_fishing = false;
 
 
 long long draw_weapon_start_timestamp = 0;
@@ -98,7 +101,6 @@ void reset_input_processor()
 
     fishing_timer = 0.0f;
 
-
     launch_sprint = false;
     launch_sprint_time = 0.0f;
     sprint_mode_stop = false;
@@ -141,7 +143,7 @@ void right_attack()
     //RE::BSInputEventQueue::GetSingleton()->AddButtonEvent(RE::INPUT_DEVICES::kMouse, my_key, 0.0, 0.0);
     set_allowed_events(2);
 
-    Hooks::add_debug_line("Input: right attack", true);
+    Hooks::add_debug_line("Input: right attack");
 }
 
 void left_attack()
@@ -185,7 +187,7 @@ void right_power_attack()
     //RE::BSInputEventQueue::GetSingleton()->AddButtonEvent(RE::INPUT_DEVICES::kMouse, my_key, 0.0, 1000.0);
     set_allowed_events(2);
 
-    Hooks::add_debug_line("Input: right power attack", true);
+    Hooks::add_debug_line("Input: right power attack");
 }
 
 
@@ -1035,7 +1037,7 @@ void walk_forward()
     RE::BSInputEventQueue::GetSingleton()->AddButtonEvent(RE::INPUT_DEVICES::kKeyboard, my_key, 1.0, 0.0);
 
 
-    Hooks::add_debug_line("Input: walk forward", true);
+    Hooks::add_debug_line("Input: walk forward");
 }
 
 
@@ -1103,6 +1105,38 @@ bool input_wants_to_look_down()
 {
     return need_look_down;
 }
+
+
+float get_mouse_y_move_to_make_camera_horizotal()
+{
+    auto camera = RE::PlayerCamera::GetSingleton();
+
+    if (camera)
+    {
+        auto camera_dir = camera->cameraRoot.get()->world.rotate;
+
+        auto camera_x = camera_dir.GetVectorX();
+        auto camera_y = camera_dir.GetVectorY();
+        auto camera_z = camera_dir.GetVectorZ();
+
+        RE::NiPoint3 down = { 1.0f, 0.0f, 0.0f };
+
+        auto mulX = camera_x * down;
+        auto mulY = camera_y * down;
+        auto mulZ = camera_z * down;
+
+
+        if (mulY > 0.9)
+            return 0.0f;
+        else
+            return 10.0f * (-mulY);
+
+    }
+
+    return 0.0f;
+}
+
+
 
 void look_down_for_summon(bool internal)
 {
@@ -1212,6 +1246,7 @@ bool make_long_cast_spell_hand(bool right, float dtime)
 
     bool check_time = !(MiscThings::is_self_healing_spell(right) && WalkerProcessor::is_concentration_spell(right));
 
+    check_time |= WalkerProcessor::is_fighting();
 
     //if (input_dualcasting && dualcasting_no_mana)
     //    low_mana_check = true;
@@ -1510,7 +1545,6 @@ void input_processor(float dtime)
     //ccBGSSSE001_FishingSystemQuest
     //ccBGSSSE001_FishingSystemScript
 
-
     auto fishing_quest = (RE::TESQuest*)RE::TESForm::LookupByEditorID("ccBGSSSE001_FishingSystemQuest");
 
     if (fishing_quest)
@@ -1520,12 +1554,46 @@ void input_processor(float dtime)
         RE::BSFixedString prop_name = "currentSystemState";
         int fishing_state = MiscThings::General::Script::GetVariable<int>(object_p, prop_name);
 
+
+        if (is_fishing())
+        {
+            was_fishing = true;
+            if (!fishing_gave_info_cast)
+            {
+                send_random_context("You cast your line into water and start fishing...", false);
+                fishing_gave_info_cast = true;
+            }
+
+        }
+        else
+        {
+            if (was_fishing)
+                MiscThings::set_fishing_ask_for_more();
+
+
+            was_fishing = false;
+            fishing_gave_info_cast = false;
+        }
+            
+
+
         if (fishing_state == 4)
         {
-            if (fishing_timer > 2.0f)
+            if (fishing_timer > fishing_reaction_time)
+            {
+                if (!fishing_gave_info_hooked)
+                {
+                    fishing_gave_info_hooked = true;
+                    send_random_context("Something is hooked! You reel in your line...", false);
+                }
                 confirm();
+            }
             else
+            {
                 fishing_timer += dtime;
+                fishing_gave_info_hooked = false;
+            }
+                
         }
         else
         {

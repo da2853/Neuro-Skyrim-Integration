@@ -57,7 +57,7 @@ bool is_action_on_cooldown(std::string action_name)
     {
         if (action_name == Capabilities::ExploreWorld::Name)
         {
-            return action_status->second.cooldown_charges_used >= 3;
+            return action_status->second.cooldown_charges_used >= 5;
         }
         else
             return action_status->second.dont_autoregister;
@@ -75,7 +75,7 @@ void neuro::set_action_cooldown(std::string action_name, float cooldown)
     {
         if (action_name == Capabilities::ExploreWorld::Name)
         {
-            if (action_status->second.cooldown_charges_used < 3)
+            if (action_status->second.cooldown_charges_used < 5)
             {
                 action_status->second.cooldown_charges_used++;
                 action_status->second.autoregister_cooldown = cooldown;
@@ -83,7 +83,7 @@ void neuro::set_action_cooldown(std::string action_name, float cooldown)
             }
             else
             {
-                action_status->second.cooldown_charges_used = 3;
+                action_status->second.cooldown_charges_used = 5;
                 action_status->second.autoregister_cooldown = cooldown;
                 action_status->second.dont_autoregister = true;
             }
@@ -1296,7 +1296,14 @@ bool neuro::NeuroSocket::Tick(float dtime) //const neurosdk_message_action_t& aC
 
         send_random_context(get_random_poke_phrase(), false);// . " + advice + "]", false);
 
-        time_threshold = (float)std::rand() / RAND_MAX * 4 + 6;
+        float bonus_threshold = 0.0f;
+
+        auto control_map = RE::ControlMap::GetSingleton();
+        bool can_walk = control_map ? control_map->enabledControls.any(RE::UserEvents::USER_EVENT_FLAG::kMovement) : false;
+        if (!can_walk)
+            bonus_threshold = 6.0f;
+
+        time_threshold = (float)std::rand() / RAND_MAX * 4 + 6 + bonus_threshold;
     }
 
 
@@ -1521,6 +1528,8 @@ bool neuro::NeuroSocket::Tick(float dtime) //const neurosdk_message_action_t& aC
                         case force_type::point_of_no_return_confirm:
                             command_result = WalkerProcessor::set_point_of_no_return_choice(json.id); break;
 
+                        case force_type::fish_more:
+                            command_result = MiscThings::set_fishing_choice(json.id); break;
 
 
                         default:
@@ -1609,6 +1618,9 @@ bool neuro::NeuroSocket::Tick(float dtime) //const neurosdk_message_action_t& aC
 
                         case (force_type::change_character):
                             command_result = RaceProcessor::set_change_categories_choice(json.ids_array); break;
+
+                        case force_type::timed_quest_puzzle_array:
+                            command_result = Observer::set_quest_puzzle_choice_array(json.ids_array); break;
 
 
                         default:

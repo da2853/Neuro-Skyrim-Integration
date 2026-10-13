@@ -189,6 +189,7 @@ namespace MiscThings {
 
     RE::TESObjectREFR* GetRaycastRef(RE::NiPoint3 from, RE::NiPoint3 aimVector, float distance, RE::TESObjectREFR* target = nullptr, uint32_t filter = 0);
     float GetRaycastDistance(RE::NiPoint3 from, RE::NiPoint3 aimVector, float distance, RE::TESObjectREFR* target, uint32_t filter);
+    uint32_t get_player_projectile_filter();
 
     RE::NiPoint3 rotate_around_axis(RE::NiPoint3 v, RE::NiPoint3 axis, float radians);
 
@@ -434,6 +435,13 @@ namespace MiscThings {
     bool dragon_is_on_the_ground(RE::TESObjectREFR* refr);
 
 
+    bool has_dualcast_perk_for_spell(RE::SpellItem* spell);
+
+    bool is_actor_staggering(RE::TESObjectREFR* object);
+
+
+    bool has_vampire_sun_debuff();
+    bool is_vampire();
 
     void item_dropper(float dtime);
     void reset_dropper();
@@ -449,6 +457,7 @@ namespace MiscThings {
     std::string get_good_fasttravel_marker_for_quest_target(RE::TESQuestTarget* target, RE::TESQuest* quest, RE::TESObjectREFR* phantom_target = nullptr);
     std::string get_good_carriage_city_marker_for_quest_target(RE::TESQuestTarget* target, RE::TESQuest* quest, RE::TESObjectREFR* phantom_target = nullptr);
 
+    bool is_outro();
 
     bool dont_probe_navmesh();
 
@@ -469,6 +478,8 @@ namespace MiscThings {
 
 
     bool killcam_active();
+    //std::string killcam_action_name();
+
 
     float get_weird_threshold(float original_threshold, RE::TESObjectREFR* target, int interaction = -1);
 
@@ -583,6 +594,8 @@ namespace MiscThings {
 
     std::pair<int, std::string> get_object_category(RE::TESForm* base_obj, RE::TESBoundObject* object = nullptr, bool without_text_category = false);
 
+    float GetLightLevel(RE::TESObjectREFR* object);
+
     void SetPosition_moveto(RE::TESObjectREFR* a_target, RE::NiPoint3 new_pos);
 
     RE::TESObjectREFR* get_dragon_for_dragonrend();
@@ -603,10 +616,12 @@ namespace MiscThings {
     std::pair<bool, std::string> equip_spell_by_refr(RE::SpellItem* spell, bool force_left = false);
     int random_int_from_range(int min, int max);
 
+    bool is_junk(RE::TESBoundObject* object, int count);
+    std::string get_junk_list();
 
     int find_best_melee_weapon();
     int find_best_bow();
-    int find_good_weapon_in_inventory();
+    int find_good_weapon_in_inventory(int type = 0);
 
     RE::NiPoint3 find_dragon_landing_spot(std::vector<RE::NiPoint3> banned_spots);
     RE::TESObjectREFR* get_mysc_quest_teleport_ref();
@@ -628,6 +643,29 @@ namespace MiscThings {
     void delayed_equipper(float dtime);
     void reset_delayed_equipper();
 
+    bool GetStageDone(RE::TESQuest* quest, int stage);
+
+    //bool SetStage(RE::TESQuest* quest, int stage);
+    //void SetStage(std::string quest_name, int stage);
+    bool SetStage(RE::TESQuest* quest, uint16_t stage);
+
+    void update_player_collision_groups();
+
+    void set_fishing_ask_for_more();
+    void fishing_processor(float dtime);
+    std::pair<bool, std::string> set_fishing_choice(int id);
+
+
+    bool is_fishing_supplies(RE::TESForm* form);
+    bool is_pickaxe(RE::TESForm* form);
+    bool is_fishing_rod(RE::TESForm* form);
+    int get_fishing_rod_amount();
+    int get_pickaxe_amount();
+
+
+
+    RE::TESBoundObject* get_random_fishing_rod_from_inventory();
+    bool has_fishing_rod_equipped();
 
     float get_shout_cooldown();
     void shout_cooldown_fix(float dtime);
