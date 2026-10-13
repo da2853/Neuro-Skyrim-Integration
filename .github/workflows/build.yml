@@ -1,13 +1,16 @@
 # GameFoundry fork CI: build the SKSE plugin with xmake + MSVC and publish it.
-# Every push to `gamefoundry` publishes release gf-<sha7>; PRs and manual runs
-# only upload the build as a workflow artifact. See GAMEFOUNDRY.md.
+# Manual runs upload build artifacts. Select publish_release on `gamefoundry`
+# to also publish release gf-<sha7>. See GAMEFOUNDRY.md.
 name: build
 
+# CI/CD runs only when explicitly started from Actions.
 on:
-  push:
-    branches: [gamefoundry]
-  pull_request:
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Publish release gf-<sha7> after the build passes (gamefoundry only)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -76,7 +79,7 @@ jobs:
   release:
     name: publish release gf-<sha7>
     needs: [core-tests, build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/gamefoundry'
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_release && github.ref == 'refs/heads/gamefoundry'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
